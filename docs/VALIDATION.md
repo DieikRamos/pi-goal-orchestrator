@@ -6,7 +6,7 @@ Date: 2026-10-22. Every test below loaded the extension via `pi -e` and used the
 
 ```bash
 npm run check   # tsc --noEmit, 0 errors
-npm test        # 55/55 tests
+npm test        # 45/45 tests
 ```
 
 Coverage:
@@ -18,16 +18,21 @@ Coverage:
 - compact and truncated report;
 - fake RPC: ping, spawn, completion, consume, reply race, timeout, error;
 - fake scheduler: parallel fan-out, audit rejection retry, blocking, missing outputs, fail-fast;
-- goal header and `pi-goal-focus` entry parsing;
-- task-mode planning: one audited node per pending task chained in order, integrated
-  verification node, single objective node without tasks, derived ids pass plan validation;
-- automatic trigger decisions: disabled/unfocused/paused/empty/in-flight/auto-continue opt-out,
-  force bypass, one nudge per objective signature, re-plan after a tweak, no auto-retry
-  of a failed run, marker roundtrip and malformed run files;
-- extension wiring with a fake API: tool/command/hook registration, exactly one boundary
-  continuation for a decided goal, opt-out respected, the write/edit guard opening
-  after a completed run, and `/orchestrate-mode` toggling project settings;
+- plan store: numbering from the highest existing plan, atomic plan.json/plan.md writes,
+  list/get/update, malformed plan directories ignored, resume target resolution
+  (explicit number, newest resumable, running plans excluded by default);
+- plan artifacts: markdown rendering with objective, requirements, notes, node deps,
+  and the last run node outcomes (status/attempts) persisted back into plan.json;
+- extension wiring with a fake API: tool/command/session-hook registration,
+  `/orchestrator-plan` sending the hidden planning turn, `/orchestrator-resume`
+  resolving and refusing running plans, plan-list/status output, and the dashboard
+  widget/status line, and `orchestrator_run` rejecting an unknown plan before
+  touching subagents;
 - settings mutations: atomic project-settings write preserving unknown keys, no temp file left behind.
+
+The goal-specific tests from the previous version (goal header parsing, task-mode
+planning, automatic goal trigger, write/edit guard) were removed together with the
+`pi-goal-x` dependency.
 
 ## 2. Real DAG with parallelism
 
@@ -74,3 +79,22 @@ wt -> wt.txt on branch pi-agent-a0093374-e8dd-4c3
 - Cost: ~$0.0026.
 
 This validates the two delicate points: worktree outputs are checked on the branch (`git cat-file`), and the auditor is explicitly told to inspect the branch, not the main working tree.
+
+## 5. Real numbered plan flow (2026-10-22)
+
+Temporary git project, **no goal extension**, real model and real `pi-subagents`:
+
+```text
+pi -e <repo> -p "Call orchestrator_plan ..."      → plan #1
+pi -e <repo> -p "Call orchestrator_run plan 1"    → run complete
+```
+
+- `orchestrator_plan` wrote `.pi/orchestrator/plans/1/plan.json` and `plan.md`.
+- `orchestrator_run` spawned node `write`, the independent auditor approved it,
+  and `hello.txt` contained `Hi`.
+- `plan.json` recorded `status: complete` and the run id.
+- Artifacts: `.pi/orchestrator/runs/<runId>/` (`plan.json`, `run.json`, `report.md`,
+  per-node brief/result/audit).
+
+A real `pi -e … -p` load also confirmed the tools are registered as
+`orchestrator_plan` and `orchestrator_run`.

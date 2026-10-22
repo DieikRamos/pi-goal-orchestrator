@@ -44,7 +44,7 @@ export interface PlanAuditSpec {
 }
 
 export interface PlanSpec {
-	goal_id?: string;
+	plan_number?: number;
 	objective?: string;
 	nodes: PlanNodeSpec[];
 	max_concurrent?: number;
@@ -108,7 +108,7 @@ export interface NodeAuditResult {
 }
 
 export interface NormalizedPlan {
-	goalId?: string;
+	planNumber?: number;
 	objective: string;
 	nodes: PlanNode[];
 	maxConcurrent: number;
@@ -127,6 +127,7 @@ export interface WorkerOutcome {
 
 export interface RunProgress {
 	runId: string;
+	planNumber?: number;
 	artifactDir: string;
 	nodes: Array<{
 		id: string;
@@ -142,7 +143,7 @@ export interface RunResult {
 	status: "complete" | "failed" | "aborted";
 	artifactDir: string;
 	objective: string;
-	goalId?: string;
+	planNumber?: number;
 	nodes: PlanNode[];
 	startedAt: string;
 	completedAt: string;

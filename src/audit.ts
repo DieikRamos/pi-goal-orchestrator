@@ -1,7 +1,7 @@
 /**
  * Independent node auditor.
  *
- * This is intentionally the same shape as pi-goal-x's completion auditor: a
+ * The auditor shape is intentionally familiar: an independent session with a
  * fresh in-memory pi session with an empty resource loader and read-only tools.
  * It receives the worker's claim only as untrusted evidence and must inspect
  * the workspace itself.

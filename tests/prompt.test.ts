@@ -48,7 +48,7 @@ test("worker prompt is self-contained and includes dependency context", () => {
 	assert.match(prompt, /pi-agent-contract/);
 	assert.match(prompt, /Expected outputs/);
 	assert.match(prompt, /src\/b\.ts/);
-	assert.match(prompt, /Do not create, update, pause, resume, or audit goals/);
+	assert.match(prompt, /Do not create, update, pause, resume, or audit plans/);
 });
 
 test("retry prompt carries the auditor feedback", () => {
@@ -97,7 +97,7 @@ test("run report is bounded and shows failures", () => {
 	const result: RunResult = {
 		runId: "run-1",
 		status: "failed",
-		artifactDir: ".pi/goals/orchestrator/runs/run-1",
+		artifactDir: ".pi/orchestrator/runs/run-1",
 		objective: p.objective,
 		nodes: p.nodes,
 		startedAt: "2026-01-01T00:00:00.000Z",

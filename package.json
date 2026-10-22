@@ -1,14 +1,14 @@
 {
   "name": "pi-goal-orchestrator",
-  "version": "0.1.0",
-  "description": "Companion extension for pi-goal-x: run a focused goal's work as an audited DAG of pi-subagents in small contexts.",
+  "version": "0.2.0",
+  "description": "Numbered, resumable plans executed as an audited DAG of pi-subagents, with a dashboard that sits next to the agents widget.",
   "license": "MIT",
   "type": "module",
   "keywords": [
     "pi-package",
     "pi",
     "pi-extension",
-    "goal",
+    "plan",
     "orchestrator",
     "subagents",
     "dag"

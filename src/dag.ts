@@ -78,6 +78,14 @@ function stringList(value: unknown, field: string, maxItems: number, maxLength: 
 	return out;
 }
 
+function optionalPlanNumber(value: unknown): number | undefined {
+	if (value === undefined || value === null) return undefined;
+	if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 1_000_000) {
+		throw new PlanValidationError("plan_number must be a positive integer.");
+	}
+	return value;
+}
+
 function normalizeNode(raw: unknown, index: number): PlanNode {
 	if (!isRecord(raw)) throw new PlanValidationError(`nodes[${index}] must be an object.`);
 	const id = nonEmptyString(raw.id, `nodes[${index}].id`, 64);
@@ -145,9 +153,7 @@ export function normalizePlan(spec: PlanSpec, defaultObjective?: string): Normal
 
 	const objective = optionalString(spec.objective, "objective", 20_000) ?? defaultObjective?.trim();
 	if (!objective) {
-		throw new PlanValidationError(
-			"objective is required when no focused pi-goal is available. Pass the goal objective explicitly.",
-		);
+		throw new PlanValidationError("objective is required. Pass the objective explicitly.");
 	}
 
 	const auditSpec = isRecord(spec.audit) ? spec.audit : {};
@@ -158,7 +164,7 @@ export function normalizePlan(spec: PlanSpec, defaultObjective?: string): Normal
 	}
 
 	return {
-		goalId: optionalString(spec.goal_id, "goal_id", 100),
+		planNumber: optionalPlanNumber(spec.plan_number),
 		objective,
 		nodes,
 		maxConcurrent: boundedInt(spec.max_concurrent, "max_concurrent", 1, HARD_MAX_CONCURRENT, DEFAULT_MAX_CONCURRENT),

@@ -36,6 +36,7 @@ function nowIso(): string {
 function progress(plan: NormalizedPlan, artifacts: RunArtifacts): RunProgress {
 	return {
 		runId: artifacts.runId,
+		planNumber: plan.planNumber,
 		artifactDir: artifacts.relative(artifacts.root),
 		nodes: plan.nodes.map((node) => ({
 			id: node.id,
@@ -144,8 +145,8 @@ export async function runPlan(args: RunPlanArgs): Promise<RunResult> {
 					type: node.agentType,
 					prompt,
 					options: {
-						description: `goal:${plan.goalId ?? "none"}/${node.id}`,
-						name: `${plan.goalId ?? "goal"}-${node.id}`.slice(0, 60),
+						description: `${plan.planNumber === undefined ? "adhoc" : `plan-${plan.planNumber}`}/${node.id}`,
+						name: `${plan.planNumber === undefined ? "plan" : `plan-${plan.planNumber}`}-${node.id}`.slice(0, 60),
 						model: node.model,
 						thinkingLevel: node.thinkingLevel,
 						maxTurns: node.maxTurns,
@@ -361,7 +362,7 @@ export async function runPlan(args: RunPlanArgs): Promise<RunResult> {
 		status,
 		artifactDir: artifacts.relative(artifacts.root),
 		objective: plan.objective,
-		goalId: plan.goalId,
+		planNumber: plan.planNumber,
 		nodes: plan.nodes,
 		startedAt,
 		completedAt: nowIso(),

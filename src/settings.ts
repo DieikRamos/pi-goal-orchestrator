@@ -23,13 +23,9 @@ export interface OrchestratorSettings {
 	};
 	defaultTimeoutSeconds: number;
 	defaultMaxAttempts: number;
-	/** Append a short orchestration guideline while a pi-goal is focused. */
-	injectGoalGuidance: boolean;
-	/** Steer a newly decided active goal into run_goal_plan automatically. */
-	autoOrchestrate: boolean;
-	/** Block main-session write/edit until the focused goal has an orchestration run. */
-	enforceSubagentWork: boolean;
-	/** Override for artifacts, relative to cwd by default. */
+	/** Render the plan dashboard widget and status line. */
+	widget: boolean;
+	/** Root for plans and run artifacts, relative to cwd by default. */
 	artifactsRoot: string;
 }
 
@@ -40,10 +36,8 @@ export const DEFAULT_SETTINGS: OrchestratorSettings = {
 	worker: {},
 	defaultTimeoutSeconds: 1800,
 	defaultMaxAttempts: 2,
-	injectGoalGuidance: true,
-	autoOrchestrate: true,
-	enforceSubagentWork: true,
-	artifactsRoot: path.join(".pi", "goals", "orchestrator"),
+	widget: true,
+	artifactsRoot: path.join(".pi", "orchestrator"),
 };
 
 const THINKING = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh"]);
@@ -87,12 +81,8 @@ export function applySettingsLayer(base: OrchestratorSettings, raw: unknown): Or
 	if (timeout !== undefined) next.defaultTimeoutSeconds = timeout;
 	const attempts = int(layer.defaultMaxAttempts, 1, 5);
 	if (attempts !== undefined) next.defaultMaxAttempts = attempts;
-	const guidance = bool(layer.injectGoalGuidance);
-	if (guidance !== undefined) next.injectGoalGuidance = guidance;
-	const auto = bool(layer.autoOrchestrate);
-	if (auto !== undefined) next.autoOrchestrate = auto;
-	const enforce = bool(layer.enforceSubagentWork);
-	if (enforce !== undefined) next.enforceSubagentWork = enforce;
+	const widget = bool(layer.widget);
+	if (widget !== undefined) next.widget = widget;
 	const root = str(layer.artifactsRoot);
 	if (root) next.artifactsRoot = root;
 	if (audit) {

@@ -1,7 +1,7 @@
 /**
  * Durable run artifacts.
  *
- * Each run gets a directory under `.pi/goals/orchestrator/runs/<runId>/`.
+ * Each execution gets a directory under `<artifactsRoot>/runs/<runId>/`.
  * Worker transcripts stay in pi-subagents' own session/output files; what is
  * written here is the compact contract: the plan, per-node result, auditor
  * verdict, usage, and a run.json that the status command can read.
@@ -10,25 +10,15 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { resolveRoot, safeSegment, writeAtomic } from "./fsutil.ts";
 import type { NormalizedPlan, PlanNode, RunResult } from "./types.ts";
 
 export const LATEST_POINTER = "latest.json";
 
-function safeSegment(value: string, fallback: string): string {
-	const clean = value.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
-	return clean || fallback;
-}
-
-function writeAtomic(filePath: string, content: string): void {
-	fs.mkdirSync(path.dirname(filePath), { recursive: true });
-	const temp = `${filePath}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`;
-	fs.writeFileSync(temp, content, "utf8");
-	fs.renameSync(temp, filePath);
-}
-
-export function makeRunId(goalId?: string): string {
+export function makeRunId(planNumber?: number): string {
 	const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
-	return `${stamp}-${safeSegment(goalId ?? "goal", "goal")}-${randomUUID().slice(0, 8)}`;
+	const label = planNumber === undefined ? "adhoc" : `plan-${planNumber}`;
+	return `${stamp}-${safeSegment(label, "plan")}-${randomUUID().slice(0, 8)}`;
 }
 
 export class RunArtifacts {
@@ -39,7 +29,7 @@ export class RunArtifacts {
 	constructor(cwd: string, root: string, runId: string) {
 		this.cwd = cwd;
 		this.runId = runId;
-		this.root = path.isAbsolute(root) ? path.join(root, "runs", runId) : path.join(cwd, root, "runs", runId);
+		this.root = path.join(resolveRoot(cwd, root), "runs", runId);
 	}
 
 	/** Relative path is what prompts show; absolute is what the extension writes. */
@@ -52,7 +42,7 @@ export class RunArtifacts {
 			path.join(this.root, "plan.json"),
 			JSON.stringify(
 				{
-					goalId: plan.goalId,
+					planNumber: plan.planNumber,
 					objective: plan.objective,
 					maxConcurrent: plan.maxConcurrent,
 					failFast: plan.failFast,
@@ -108,10 +98,10 @@ export class RunArtifacts {
 		writeAtomic(
 			path.join(this.root, "report.md"),
 			[
-				`# Goal orchestration ${result.status}`,
+				`# Plan orchestration ${result.status}`,
 				"",
 				`- Run: ${result.runId}`,
-				`- Goal: ${result.goalId ?? "(none)"}`,
+				`- Plan: ${result.planNumber === undefined ? "(ad-hoc)" : `#${result.planNumber}`}`,
 				`- Objective: ${result.objective}`,
 				`- Started: ${result.startedAt}`,
 				`- Completed: ${result.completedAt}`,
@@ -130,7 +120,7 @@ export class RunArtifacts {
 				{
 					runId: result.runId,
 					status: result.status,
-					goalId: result.goalId,
+					planNumber: result.planNumber,
 					objective: result.objective,
 					artifactDir: this.root,
 					startedAt: result.startedAt,
@@ -147,7 +137,7 @@ export class RunArtifacts {
 export interface LatestRun {
 	runId: string;
 	status: string;
-	goalId?: string;
+	planNumber?: number;
 	objective: string;
 	artifactDir: string;
 	startedAt: string;
@@ -156,9 +146,7 @@ export interface LatestRun {
 }
 
 export function readLatestRun(cwd: string, root: string): LatestRun | null {
-	const file = path.isAbsolute(root)
-		? path.join(root, LATEST_POINTER)
-		: path.join(cwd, root, LATEST_POINTER);
+	const file = path.join(resolveRoot(cwd, root), LATEST_POINTER);
 	try {
 		return JSON.parse(fs.readFileSync(file, "utf8")) as LatestRun;
 	} catch {

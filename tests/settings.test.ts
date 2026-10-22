@@ -9,8 +9,8 @@ test("defaults are valid", () => {
 	assert.equal(DEFAULT_SETTINGS.maxConcurrent, 3);
 	assert.equal(DEFAULT_SETTINGS.audit.enabled, true);
 	assert.equal(DEFAULT_SETTINGS.failFast, true);
-	assert.equal(DEFAULT_SETTINGS.autoOrchestrate, true);
-	assert.equal(DEFAULT_SETTINGS.enforceSubagentWork, true);
+	assert.equal(DEFAULT_SETTINGS.widget, true);
+	assert.equal(DEFAULT_SETTINGS.artifactsRoot, path.join(".pi", "orchestrator"));
 });
 
 test("layers merge and validate values", () => {
@@ -21,8 +21,7 @@ test("layers merge and validate values", () => {
 		worker: { model: "cheap/model" },
 		defaultTimeoutSeconds: 900,
 		defaultMaxAttempts: 4,
-		autoOrchestrate: false,
-		enforceSubagentWork: false,
+		widget: false,
 	});
 	assert.equal(merged.maxConcurrent, 5);
 	assert.equal(merged.failFast, false);
@@ -32,8 +31,7 @@ test("layers merge and validate values", () => {
 	assert.equal(merged.worker.model, "cheap/model");
 	assert.equal(merged.defaultTimeoutSeconds, 900);
 	assert.equal(merged.defaultMaxAttempts, 4);
-	assert.equal(merged.autoOrchestrate, false);
-	assert.equal(merged.enforceSubagentWork, false);
+	assert.equal(merged.widget, false);
 });
 
 test("invalid values are ignored instead of corrupting settings", () => {
@@ -64,11 +62,10 @@ test("writeProjectSettings merges atomically and preserves unknown keys", () => 
 		fs.mkdirSync(path.join(cwd, ".pi"), { recursive: true });
 		fs.writeFileSync(
 			projectSettingsPath(cwd),
-			JSON.stringify({ autoOrchestrate: false, maxConcurrent: 4, fromNewerBuild: { keep: true } }),
+			JSON.stringify({ widget: false, maxConcurrent: 4, fromNewerBuild: { keep: true } }),
 		);
-		const updated = writeProjectSettings(cwd, { enforceSubagentWork: false });
-		assert.equal(updated.autoOrchestrate, false);
-		assert.equal(updated.enforceSubagentWork, false);
+		const updated = writeProjectSettings(cwd, { widget: true });
+		assert.equal(updated.widget, true);
 		assert.equal(updated.maxConcurrent, 4);
 		const raw = JSON.parse(fs.readFileSync(projectSettingsPath(cwd), "utf8")) as Record<string, unknown>;
 		assert.deepEqual(raw.fromNewerBuild, { keep: true });

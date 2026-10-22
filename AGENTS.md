@@ -1,20 +1,31 @@
 # AGENTS.md — pi-goal-orchestrator
 
-Pi extension that orchestrates a `pi-goal-x` goal as a DAG of audited subagents.
+Pi extension that turns numbered plans into an audited DAG of `pi-subagents`.
+Independent of `pi-goal-x`.
 
 ## Architecture
 
-- `extensions/orchestrator.ts` — `run_goal_plan` tool, commands, prompt hook.
+- `extensions/orchestrator.ts` — tools (`orchestrator_plan`, `orchestrator_run`),
+  commands, session lifecycle.
+- `src/plans.ts` — numbered plan store (`plans/<n>/plan.json` + `plan.md`), pure
+  resume/list helpers.
 - `src/dag.ts` — plan validation and pure DAG primitives. **No I/O.**
-- `src/auto.ts` — automatic trigger rules for a decided goal (pure decision + marker/runs I/O).
-- `src/tasks.ts` — derives a plan from the focused goal's pending tasks. **Pure.**
 - `src/scheduler.ts` — executor: ready set, concurrency, retries, auditing.
 - `src/rpc.ts` — `@tintinweb/pi-subagents` RPC client.
 - `src/audit.ts` — isolated read-only per-node auditor.
-- `src/artifacts.ts` — persistence under `.pi/goals/orchestrator/runs/<id>/`.
-- `src/prompt.ts` — prompts and compact report.
-- `src/goal.ts` — best-effort reader for the focused `pi-goal-x` goal.
+- `src/artifacts.ts` — run persistence under `<artifactsRoot>/runs/<id>/`.
+- `src/fsutil.ts` — atomic writes and path helpers.
+- `src/prompt.ts` — worker/auditor/planning/resume prompts and compact report.
+- `src/ui.ts` — above-editor dashboard widget, styled like the agents widget.
 - `src/settings.ts` — global/project configuration.
+
+## Flow
+
+1. `/orchestrator-plan <draft>` starts a hidden planning turn; the model calls
+   `orchestrator_plan`, which allocates the next number and persists the plan.
+2. `/orchestrator-resume [n]` starts an execution turn; the model calls
+   `orchestrator_run` with `plan_number`.
+3. `orchestrator_run` executes the stored DAG and updates the plan status.
 
 ## Invariants
 
@@ -22,11 +33,13 @@ Pi extension that orchestrates a `pi-goal-x` goal as a DAG of audited subagents.
 2. A worker never receives the parent transcript; it gets the brief + dependency summaries.
 3. Definitive failure blocks dependents; nothing is silently skipped.
 4. The auditor is an isolated read-only session and treats the worker's claim as untrusted.
-5. `run_goal_plan` never runs inside a subagent.
-6. Artifact writes are atomic; nothing is written outside `.pi/goals/orchestrator` (or `artifactsRoot`).
-7. Automatic triggering never retries the same objective and never fires while a run is in flight.
-8. Goal work runs in subagents: until a run exists, main-session `write`/`edit` are blocked.
+5. `orchestrator_run` never runs inside a subagent.
+6. Artifact and plan writes are atomic; nothing is written outside `artifactsRoot`.
+7. Plan numbers are stable and monotonic per project; a plan is never renumbered.
+8. Planning and execution are separate turns: `/orchestrator-plan` never executes.
 
 ## Tests
 
-`npm test` covers DAG logic, prompts, settings, goal reading, and RPC with a fake event bus. Never call real models in tests.
+`npm test` covers plan storage/numbering/resume, DAG logic, prompts, settings,
+RPC, scheduler, UI view helpers, and the extension wiring with a fake API.
+Never call real models in tests.

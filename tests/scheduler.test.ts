@@ -77,9 +77,9 @@ function makePlan(spec: PlanSpec) {
 	} as PlanSpec);
 }
 
-function makeArtifacts(cwd: string, goalId = "goal-1"): RunArtifacts {
-	const root = path.join(cwd, ".pi", "goals", "orchestrator");
-	const artifacts = new RunArtifacts(cwd, root, makeRunId(goalId));
+function makeArtifacts(cwd: string, planNumber = 1): RunArtifacts {
+	const root = path.join(cwd, ".pi", "orchestrator");
+	const artifacts = new RunArtifacts(cwd, root, makeRunId(planNumber));
 	artifacts.writePlan(makePlan({ nodes: [{ id: "x", prompt: "x" }] }));
 	return artifacts;
 }

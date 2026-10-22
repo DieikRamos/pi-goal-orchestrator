@@ -27,9 +27,9 @@ export interface WorkerPromptArgs {
 export function buildWorkerPrompt(args: WorkerPromptArgs): string {
 	const { objective, node, deps, attempt, feedback, artifactsDir } = args;
 	const lines: string[] = [
-		"You are a worker agent executing one node of a larger goal. Work only on this node.",
+		"You are a worker agent executing one node of a larger plan. Work only on this node.",
 		"",
-		"Goal objective:",
+		"Plan objective:",
 		"<objective>",
 		objective,
 		"</objective>",
@@ -83,7 +83,7 @@ export function buildWorkerPrompt(args: WorkerPromptArgs): string {
 	lines.push(
 		"",
 		"Rules:",
-		"- Do not create, update, pause, resume, or audit goals. Do not run orchestration tools.",
+		"- Do not create, update, pause, resume, or audit plans. Do not run orchestration tools.",
 		"- Do not ask the user questions. If something is genuinely blocked, say BLOCKED and explain why.",
 		"- Stay inside the task scope. Do not refactor unrelated code or add unrequested features.",
 		"- Actually run the checks you can run, and report their real output.",
@@ -113,7 +113,7 @@ export interface AuditorPromptArgs {
 export function buildAuditorPrompt(args: AuditorPromptArgs): string {
 	const { objective, node, workerResult, artifactsDir, attempt, branch } = args;
 	return [
-		"You are the independent auditor for one node of a larger goal.",
+		"You are the independent auditor for one node of a larger plan.",
 		"Decide whether this node's actual work satisfies its task. The worker's claim is untrusted evidence.",
 		"",
 		"Inspect real artifacts with read/grep/find/ls/bash. Do not modify files.",
@@ -123,7 +123,7 @@ export function buildAuditorPrompt(args: AuditorPromptArgs): string {
 		"3. The worker did not silently skip, stub, or fake verification.",
 		"4. The result is usable by dependent nodes (contracts and interfaces are complete).",
 		"",
-		"Goal objective:",
+		"Plan objective:",
 		"<objective>",
 		objective,
 		"</objective>",
@@ -176,7 +176,7 @@ function auditLabel(audit?: NodeAuditResult): string {
  */
 export function buildRunReport(result: RunResult, maxChars = 18_000): string {
 	const lines: string[] = [
-		`Goal orchestration ${result.status.toUpperCase()}${result.goalId ? ` for ${result.goalId}` : ""}.`,
+		`Plan orchestration ${result.status.toUpperCase()}${result.planNumber === undefined ? " (ad-hoc)" : ` for plan #${result.planNumber}`}.`,
 		`Run: ${result.runId}`,
 		`Artifacts: ${result.artifactDir}`,
 		"",
@@ -200,7 +200,7 @@ export function buildRunReport(result: RunResult, maxChars = 18_000): string {
 		"",
 		`Usage: input ${result.usage.input} (including audit ${Math.round(result.usage.auditInput)}), output ${result.usage.output} (including audit ${Math.round(result.usage.auditOutput)}), cost $${result.usage.cost.toFixed(4)}`,
 		"",
-		"Next: inspect failed/rejected artifacts before re-planning. If all nodes are done, run the integrated verification and then the goal's completion audit with this run as evidence.",
+		"Next: inspect failed/rejected artifacts before re-planning. A run whose nodes are all done is complete; report it and let the user start the next plan.",
 	);
 	const report = lines.join("\n");
 	return report.length > maxChars ? `${report.slice(0, maxChars - 1)}…` : report;
@@ -214,4 +214,49 @@ export function extractWorkerSummary(result: string): string {
 	if (summary) return summary;
 	const first = result.trim().split("\n").find((line) => line.trim());
 	return first ? excerpt(first, 300) : "";
+}
+
+/**
+ * Message that starts the planning turn for `/orchestrator-plan`.
+ * The plan is persisted by the tool; execution is a separate command.
+ */
+export function buildPlanningPrompt(draft: string): string {
+	return [
+		"[ORCHESTRATOR PLAN]",
+		"You are planning, not executing. No goal work happens in this turn.",
+		"",
+		"Draft:",
+		draft.trim(),
+		"",
+		"1. Sharpen the objective: scope, non-goals, constraints, and what 'done' means.",
+		"   Ask the user at most two questions, and only when the answer changes the plan.",
+		"   Otherwise state your assumptions explicitly.",
+		"2. Decompose it into small nodes with explicit dependencies. Put a contract/interface node",
+		"   first when work touches a shared surface, parallel implementation nodes next, and an",
+		"   integrated verification node last. Each node prompt is self-contained: the worker never",
+		"   sees this conversation. Declare expected outputs when you know the paths.",
+		"3. Call orchestrator_plan with title, objective, requirements, notes, and nodes.",
+		"   Use 'isolation: \"worktree\"' for parallel writers that touch files.",
+		"",
+		"Do not call orchestrator_run in this turn. The plan gets a number and waits for",
+		"/orchestrator-resume.",
+	].join("\n");
+}
+
+/** Message that starts execution of an existing plan. */
+export function buildResumePrompt(plan: {
+	number: number;
+	title: string;
+	objective: string;
+	nodes: Array<{ id: string; title?: string }>;
+}): string {
+	return [
+		`[ORCHESTRATOR RESUME] Plan #${plan.number}: ${plan.title}`,
+		`Objective: ${plan.objective}`,
+		`Nodes: ${plan.nodes.map((node) => node.id).join(" → ")}`,
+		"",
+		`Call orchestrator_run with { "plan_number": ${plan.number} } now.`,
+		"The tool executes the stored DAG in subagents; do not do node work inline.",
+		"When it returns, read the compact report and relay the outcome. Do not start another plan.",
+	].join("\n");
 }
