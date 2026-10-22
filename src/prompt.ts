@@ -55,6 +55,7 @@ export function buildWorkerPrompt(args: WorkerPromptArgs): string {
 				"",
 				`<dependency id="${dep.id}" title="${dep.title.replace(/"/g, "&quot;")}">`,
 				`Result summary: ${excerpt(dep.summary || dep.result || "(no summary)", 1600)}`,
+				dep.branch ? `Worktree branch: ${dep.branch} (merge or inspect it before integrating)` : "",
 				dep.artifactDir ? `Artifacts: ${dep.artifactDir}` : "",
 				`</dependency>`,
 			);
@@ -69,6 +70,13 @@ export function buildWorkerPrompt(args: WorkerPromptArgs): string {
 			excerpt(feedback, 3000),
 			"</audit_feedback>",
 			"Fix the specific problems above. Do not repeat the same result.",
+		);
+	}
+
+	if (node.isolation === "worktree") {
+		lines.push(
+			"",
+			"You are running in an isolated git worktree. pi-subagents commits your changes to a branch when you finish; the main checkout will not contain them yet. Do not merge the branch yourself.",
 		);
 	}
 

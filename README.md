@@ -144,6 +144,10 @@ Parâmetros da tool vencem a configuração.
 - Não tem dashboard próprio; acompanhe via widget do `pi-subagents`, `/agents` e artefatos.
 - O relatório é textual; não há schema estruturado por nó (o auditor lê arquivos reais).
 
+## Validação
+
+O que já foi testado de ponta a ponta (DAG paralelo real, auditoria real, worktree + branch) está em [`docs/VALIDATION.md`](docs/VALIDATION.md).
+
 ## Desenvolvimento
 
 ```bash

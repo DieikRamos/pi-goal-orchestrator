@@ -35,6 +35,7 @@ test("worker prompt is self-contained and includes dependency context", () => {
 	const backend = p.nodes[1]!;
 	contract.result = "The API is GET /export with query q.";
 	contract.summary = "GET /export with q";
+	contract.branch = "pi-agent-contract";
 	const prompt = buildWorkerPrompt({
 		objective: p.objective,
 		node: backend,
@@ -44,6 +45,7 @@ test("worker prompt is self-contained and includes dependency context", () => {
 	});
 	assert.match(prompt, /Implement backend/);
 	assert.match(prompt, /GET \/export/);
+	assert.match(prompt, /pi-agent-contract/);
 	assert.match(prompt, /Expected outputs/);
 	assert.match(prompt, /src\/b\.ts/);
 	assert.match(prompt, /Do not create, update, pause, resume, or audit goals/);
