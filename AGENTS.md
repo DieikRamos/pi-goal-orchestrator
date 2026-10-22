@@ -1,28 +1,28 @@
 # AGENTS.md — pi-goal-orchestrator
 
-Extensão pi que orquestra um goal do pi-goal-x como DAG de subagentes auditados.
+Pi extension that orchestrates a `pi-goal-x` goal as a DAG of audited subagents.
 
-## Arquitetura
+## Architecture
 
-- `extensions/orchestrator.ts` — tool `run_goal_plan`, comandos, prompt hook.
-- `src/dag.ts` — validação e primitivas puras do DAG. **Sem I/O.**
-- `src/scheduler.ts` — executor: ready set, concorrência, retries, auditoria.
-- `src/rpc.ts` — cliente da RPC do `@tintinweb/pi-subagents`.
-- `src/audit.ts` — auditor isolado read-only por nó.
-- `src/artifacts.ts` — persistência em `.pi/goals/orchestrator/runs/<id>/`.
-- `src/prompt.ts` — prompts e relatório compacto.
-- `src/goal.ts` — leitura best-effort do goal focado do pi-goal-x.
-- `src/settings.ts` — configuração global/projeto.
+- `extensions/orchestrator.ts` — `run_goal_plan` tool, commands, prompt hook.
+- `src/dag.ts` — plan validation and pure DAG primitives. **No I/O.**
+- `src/scheduler.ts` — executor: ready set, concurrency, retries, auditing.
+- `src/rpc.ts` — `@tintinweb/pi-subagents` RPC client.
+- `src/audit.ts` — isolated read-only per-node auditor.
+- `src/artifacts.ts` — persistence under `.pi/goals/orchestrator/runs/<id>/`.
+- `src/prompt.ts` — prompts and compact report.
+- `src/goal.ts` — best-effort reader for the focused `pi-goal-x` goal.
+- `src/settings.ts` — global/project configuration.
 
-## Invariantes
+## Invariants
 
-1. Nó só vira `done` após auditoria aprovada (quando `audit: true`).
-2. Worker nunca recebe o transcript do pai; recebe brief + resumo dos deps.
-3. Falha definitiva bloqueia dependentes; nunca “pula” silenciosamente.
-4. Auditor é sessão isolada read-only e recebe a alegação do worker como untrusted.
-5. `run_goal_plan` não roda dentro de subagente.
-6. Escrita em artefatos é atômica; nada fora de `.pi/goals/orchestrator` (ou `artifactsRoot`).
+1. A node only becomes `done` after an approved audit (when `audit: true`).
+2. A worker never receives the parent transcript; it gets the brief + dependency summaries.
+3. Definitive failure blocks dependents; nothing is silently skipped.
+4. The auditor is an isolated read-only session and treats the worker's claim as untrusted.
+5. `run_goal_plan` never runs inside a subagent.
+6. Artifact writes are atomic; nothing is written outside `.pi/goals/orchestrator` (or `artifactsRoot`).
 
-## Testes
+## Tests
 
-`npm test` cobre DAG, prompts, settings, leitura de goal e RPC com event bus falso. Não chame modelos reais nos testes.
+`npm test` covers DAG logic, prompts, settings, goal reading, and RPC with a fake event bus. Never call real models in tests.

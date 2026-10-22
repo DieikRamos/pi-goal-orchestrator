@@ -1,6 +1,6 @@
 # pi-goal-orchestrator
 
-Extensão companheira do [`pi-goal-x`](https://github.com/tmonk/pi-goal-x): transforma o goal focado em uma **sessão orquestradora**. O agente principal planeja e revisa; workers rodam em contextos separados; cada nó só libera dependentes depois de uma **auditoria independente**.
+Companion extension for [`pi-goal-x`](https://github.com/tmonk/pi-goal-x): it turns the focused goal into an **orchestrator session**. The main agent plans and reviews; workers run in separate contexts; each node only unblocks its dependents after an **independent audit**.
 
 ```
 contract
@@ -8,67 +8,67 @@ contract
    └── frontend  ─┴── integrate
 ```
 
-## Requisitos
+## Requirements
 
 - pi 1.3+
-- `pi-goal-x` (opcional, mas é o alvo da integração)
-- [`@tintinweb/pi-subagents`](https://github.com/tintinweb/pi-subagents) — usado via RPC (`subagents:rpc:spawn`)
+- `pi-goal-x` (optional, but it is the integration target)
+- [`@tintinweb/pi-subagents`](https://github.com/tintinweb/pi-subagents) — used over RPC (`subagents:rpc:spawn`)
 
-## Instalar
+## Install
 
 ```bash
-# instalação direto do repositório:
+# install directly from the repository:
 pi install git:github.com/DieikRamos/pi-goal-orchestrator
 
-# ou, a partir de um clone local:
+# or from a local clone:
 git clone https://github.com/DieikRamos/pi-goal-orchestrator
 pi install ./pi-goal-orchestrator
 
-# durante o desenvolvimento, sem instalar:
+# during development, without installing:
 pi -e ./pi-goal-orchestrator
 ```
 
-## Uso
+## Usage
 
-Com um goal focado no `pi-goal-x`, peça ao agente para executar o plano:
+With a focused goal in `pi-goal-x`, ask the agent to execute the plan:
 
 ```text
-Execute o goal usando run_goal_plan. Crie um nó de contrato, depois backend e
-frontend em paralelo, depois um nó de verificação integrada.
+Execute the goal using run_goal_plan. Create a contract node, then backend and
+frontend in parallel, then an integrated verification node.
 ```
 
-O agente chama:
+The agent calls:
 
 ```json
 {
   "nodes": [
     {
       "id": "contract",
-      "title": "Definir contrato",
-      "prompt": "Defina o contrato REST e os tipos compartilhados...",
+      "title": "Define the contract",
+      "prompt": "Define the REST contract and shared types...",
       "outputs": ["docs/contract.md"]
     },
     {
       "id": "backend",
-      "title": "Implementar backend",
+      "title": "Implement the backend",
       "deps": ["contract"],
-      "prompt": "Implemente o backend conforme docs/contract.md...",
+      "prompt": "Implement the backend according to docs/contract.md...",
       "isolation": "worktree",
       "outputs": ["crates/api/src/entity.rs"]
     },
     {
       "id": "frontend",
-      "title": "Implementar frontend",
+      "title": "Implement the frontend",
       "deps": ["contract"],
-      "prompt": "Implemente a tela e o client conforme docs/contract.md...",
+      "prompt": "Implement the screen and client according to docs/contract.md...",
       "isolation": "worktree",
       "outputs": ["apps/web/src/entity.tsx"]
     },
     {
       "id": "verify",
-      "title": "Verificação integrada",
+      "title": "Integrated verification",
       "deps": ["backend", "frontend"],
-      "prompt": "Rode build, testes e o fluxo ponta a ponta. Corrija o que falhar...",
+      "prompt": "Run the build, tests, and the end-to-end flow. Fix whatever fails...",
       "audit": true
     }
   ],
@@ -76,21 +76,21 @@ O agente chama:
 }
 ```
 
-Sem `objective`/`goal_id`, a extensão lê o goal focado em `.pi/goals/` e a entrada `pi-goal-focus` da sessão.
+Without `objective`/`goal_id`, the extension reads the focused goal from `.pi/goals/` and the session's `pi-goal-focus` entry.
 
-## O que acontece
+## What happens
 
-1. O plano é validado (ids, dependências, ciclos, limites) e persistido.
-2. Nós “ready” são disparados via `subagents:rpc:spawn`, até `max_concurrent`.
-3. Cada worker recebe só o brief do nó + resumo dos dependentes. Sem transcript do pai.
-4. Ao terminar, o resultado é gravado e um auditor independente (sessão isolada read-only) inspeciona os artefatos reais.
-5. Aprovado → `done` e dependentes liberados. Reprovado → o feedback volta no prompt e o nó é repetido até `max_attempts`.
-6. Falha definitiva → dependentes ficam `blocked`; o goal não deve ser marcado completo.
-7. O relatório volta compacto para o orquestrador; o transcript completo fica em disco.
+1. The plan is validated (ids, dependencies, cycles, limits) and persisted.
+2. “Ready” nodes are spawned via `subagents:rpc:spawn`, up to `max_concurrent`.
+3. Each worker receives only the node brief + summaries from its dependencies. No parent transcript.
+4. When a worker finishes, the result is written and an independent auditor (isolated read-only session) inspects the real artifacts.
+5. Approved → `done`, dependents unblocked. Rejected → the audit feedback goes into the prompt and the node is retried until `max_attempts`.
+6. Definitive failure → dependents become `blocked`; the goal must not be marked complete.
+7. A compact report returns to the orchestrator; the full transcript stays on disk.
 
-O auditor final do `pi-goal-x` continua sendo a autoridade final. O relatório do DAG é evidência, não substituto.
+The final `pi-goal-x` auditor remains the final authority. The DAG report is evidence, not a replacement.
 
-## Artefatos
+## Artifacts
 
 ```text
 .pi/goals/orchestrator/runs/<runId>/
@@ -103,11 +103,11 @@ O auditor final do `pi-goal-x` continua sendo a autoridade final. O relatório d
   nodes/<id>/node.json
 ```
 
-`/orchestrate-status` mostra o último run. `/orchestrate-settings` mostra a configuração resolvida.
+`/orchestrate-status` shows the latest run. `/orchestrate-settings` shows the resolved configuration.
 
-## Configuração
+## Configuration
 
-Opcional, em `.pi/pi-goal-orchestrator.json` (projeto) ou `~/.pi/agent/pi-goal-orchestrator.json` (global). O projeto vence.
+Optional, in `.pi/pi-goal-orchestrator.json` (project) or `~/.pi/agent/pi-goal-orchestrator.json` (global). Project values win.
 
 ```json
 {
@@ -127,34 +127,34 @@ Opcional, em `.pi/pi-goal-orchestrator.json` (projeto) ou `~/.pi/agent/pi-goal-o
 }
 ```
 
-Parâmetros da tool vencem a configuração.
+Tool parameters override the configuration.
 
-## Paralelismo e worktrees
+## Parallelism and worktrees
 
-- Writers paralelos devem usar `"isolation": "worktree"`. O `pi-subagents` commita o trabalho em um branch `pi-agent-*` e o nome aparece no resultado/branch do nó.
-- O worktree é removido ao final; o branch fica no repositório. O orquestrador precisa mergear/validar os branches antes do nó de integração.
-- Se `worktreeIsolation` estiver desligado no projeto, o `pi-subagents` ignora o pedido. Nesse caso, **não rode writers nos mesmos arquivos em paralelo**: use `max_concurrent: 1` ou escopos de arquivo disjuntos.
-- Projeto precisa ser git com pelo menos um commit para worktree funcionar.
+- Parallel writers should use `"isolation": "worktree"`. `pi-subagents` commits the work to a `pi-agent-*` branch, and the branch name appears in the node result.
+- The worktree is removed at the end; the branch remains in the repository. The orchestrator must merge and validate the branches before the integration node.
+- If `worktreeIsolation` is disabled in the project, `pi-subagents` silently ignores the request. In that case, **do not run writers on the same files in parallel**: use `max_concurrent: 1` or disjoint file scopes.
+- The project must be a git repository with at least one commit for worktrees to work.
 
-## Segurança e isolamento
+## Safety and isolation
 
-- A extensão se recusa a rodar dentro de subagentes (`PI_SUBAGENT_CHILD=1`), evitando explosão de orquestração.
-- O auditor de nó usa apenas `read`, `grep`, `find`, `ls`, `bash` e um resource loader vazio; não herda skills/extensões do projeto.
-- Workers não herdam o histórico do pai (`inheritContext: false`).
-- O `run_goal_plan` é bloqueante: o turno do orquestrador espera o DAG estabilizar. Use `Esc` para abortar; os agentes em execução recebem `stop`.
+- The extension refuses to run inside subagents (`PI_SUBAGENT_CHILD=1`), preventing orchestration fan-out.
+- The node auditor uses only `read`, `grep`, `find`, `ls`, `bash` and an empty resource loader; it does not inherit project skills or extensions.
+- Workers do not inherit the parent history (`inheritContext: false`).
+- `run_goal_plan` is blocking: the orchestrator turn waits until the DAG stabilizes. Press `Esc` to abort; running agents receive `stop`.
 
-## Limitações do MVP
+## MVP limitations
 
-- Não atualiza automaticamente as tarefas do `pi-goal-x`; o orquestrador deve chamar `update_goal_task` depois do relatório.
-- Não faz merge automático de branches de worktree; um nó de integração/merge deve fazer isso explicitamente.
-- Não tem dashboard próprio; acompanhe via widget do `pi-subagents`, `/agents` e artefatos.
-- O relatório é textual; não há schema estruturado por nó (o auditor lê arquivos reais).
+- It does not automatically update `pi-goal-x` tasks; the orchestrator should call `update_goal_task` after the report.
+- It does not automatically merge worktree branches; an integration/merge node must do that explicitly.
+- It has no dashboard of its own; follow progress through the `pi-subagents` widget, `/agents`, and the artifacts.
+- The report is textual; there is no structured per-node schema (the auditor reads the real files).
 
-## Validação
+## Validation
 
-O que já foi testado de ponta a ponta (DAG paralelo real, auditoria real, worktree + branch) está em [`docs/VALIDATION.md`](docs/VALIDATION.md).
+What has been tested end to end (real parallel DAG, real audit, worktree + branch) is documented in [`docs/VALIDATION.md`](docs/VALIDATION.md).
 
-## Desenvolvimento
+## Development
 
 ```bash
 npm install
@@ -162,6 +162,6 @@ npm run check
 npm test
 ```
 
-## Licença
+## License
 
 MIT.
