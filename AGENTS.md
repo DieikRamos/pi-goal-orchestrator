@@ -6,6 +6,8 @@ Pi extension that orchestrates a `pi-goal-x` goal as a DAG of audited subagents.
 
 - `extensions/orchestrator.ts` — `run_goal_plan` tool, commands, prompt hook.
 - `src/dag.ts` — plan validation and pure DAG primitives. **No I/O.**
+- `src/auto.ts` — automatic trigger rules for a decided goal (pure decision + marker/runs I/O).
+- `src/tasks.ts` — derives a plan from the focused goal's pending tasks. **Pure.**
 - `src/scheduler.ts` — executor: ready set, concurrency, retries, auditing.
 - `src/rpc.ts` — `@tintinweb/pi-subagents` RPC client.
 - `src/audit.ts` — isolated read-only per-node auditor.
@@ -22,6 +24,8 @@ Pi extension that orchestrates a `pi-goal-x` goal as a DAG of audited subagents.
 4. The auditor is an isolated read-only session and treats the worker's claim as untrusted.
 5. `run_goal_plan` never runs inside a subagent.
 6. Artifact writes are atomic; nothing is written outside `.pi/goals/orchestrator` (or `artifactsRoot`).
+7. Automatic triggering never retries the same objective and never fires while a run is in flight.
+8. Goal work runs in subagents: until a run exists, main-session `write`/`edit` are blocked.
 
 ## Tests
 

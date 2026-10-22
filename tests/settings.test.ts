@@ -6,6 +6,8 @@ test("defaults are valid", () => {
 	assert.equal(DEFAULT_SETTINGS.maxConcurrent, 3);
 	assert.equal(DEFAULT_SETTINGS.audit.enabled, true);
 	assert.equal(DEFAULT_SETTINGS.failFast, true);
+	assert.equal(DEFAULT_SETTINGS.autoOrchestrate, true);
+	assert.equal(DEFAULT_SETTINGS.enforceSubagentWork, true);
 });
 
 test("layers merge and validate values", () => {
@@ -16,6 +18,8 @@ test("layers merge and validate values", () => {
 		worker: { model: "cheap/model" },
 		defaultTimeoutSeconds: 900,
 		defaultMaxAttempts: 4,
+		autoOrchestrate: false,
+		enforceSubagentWork: false,
 	});
 	assert.equal(merged.maxConcurrent, 5);
 	assert.equal(merged.failFast, false);
@@ -25,6 +29,8 @@ test("layers merge and validate values", () => {
 	assert.equal(merged.worker.model, "cheap/model");
 	assert.equal(merged.defaultTimeoutSeconds, 900);
 	assert.equal(merged.defaultMaxAttempts, 4);
+	assert.equal(merged.autoOrchestrate, false);
+	assert.equal(merged.enforceSubagentWork, false);
 });
 
 test("invalid values are ignored instead of corrupting settings", () => {

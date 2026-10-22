@@ -25,6 +25,10 @@ export interface OrchestratorSettings {
 	defaultMaxAttempts: number;
 	/** Append a short orchestration guideline while a pi-goal is focused. */
 	injectGoalGuidance: boolean;
+	/** Steer a newly decided active goal into run_goal_plan automatically. */
+	autoOrchestrate: boolean;
+	/** Block main-session write/edit until the focused goal has an orchestration run. */
+	enforceSubagentWork: boolean;
 	/** Override for artifacts, relative to cwd by default. */
 	artifactsRoot: string;
 }
@@ -37,6 +41,8 @@ export const DEFAULT_SETTINGS: OrchestratorSettings = {
 	defaultTimeoutSeconds: 1800,
 	defaultMaxAttempts: 2,
 	injectGoalGuidance: true,
+	autoOrchestrate: true,
+	enforceSubagentWork: true,
 	artifactsRoot: path.join(".pi", "goals", "orchestrator"),
 };
 
@@ -83,6 +89,10 @@ export function applySettingsLayer(base: OrchestratorSettings, raw: unknown): Or
 	if (attempts !== undefined) next.defaultMaxAttempts = attempts;
 	const guidance = bool(layer.injectGoalGuidance);
 	if (guidance !== undefined) next.injectGoalGuidance = guidance;
+	const auto = bool(layer.autoOrchestrate);
+	if (auto !== undefined) next.autoOrchestrate = auto;
+	const enforce = bool(layer.enforceSubagentWork);
+	if (enforce !== undefined) next.enforceSubagentWork = enforce;
 	const root = str(layer.artifactsRoot);
 	if (root) next.artifactsRoot = root;
 	if (audit) {

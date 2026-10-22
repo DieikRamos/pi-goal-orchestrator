@@ -7,6 +7,7 @@ const FILE = `{
   "id": "goal-1",
   "objective": "Add CSV export",
   "status": "active",
+  "autoContinue": true,
   "taskList": {
     "tasks": [
       { "id": "t1", "title": "Contract", "status": "complete", "subtasks": [{ "id": "t1.1", "title": "Types", "status": "pending" }] }
@@ -24,6 +25,7 @@ test("parses the JSON header before the goal prompt", () => {
 	assert.equal(header?.id, "goal-1");
 	assert.equal(header?.objective, "Add CSV export");
 	assert.equal(header?.status, "active");
+	assert.equal(header?.autoContinue, true);
 	assert.equal(header?.taskList?.tasks?.[0]?.id, "t1");
 });
 

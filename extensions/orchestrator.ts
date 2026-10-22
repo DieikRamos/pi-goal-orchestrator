@@ -14,8 +14,18 @@ import {
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { makeRunId, readLatestRun, RunArtifacts } from "../src/artifacts.ts";
+import {
+	type AutoStartDecision,
+	autoStartMessage,
+	decideAutoStart,
+	listRuns,
+	objectiveSignature,
+	readAutoMarker,
+	writeAutoMarker,
+} from "../src/auto.ts";
 import { PlanValidationError, normalizePlan } from "../src/dag.ts";
 import { readFocusedGoal } from "../src/goal.ts";
+import { nodesFromGoalTasks } from "../src/tasks.ts";
 import { buildRunReport } from "../src/prompt.ts";
 import { SubagentBridge, RpcError } from "../src/rpc.ts";
 import { runPlan } from "../src/scheduler.ts";
@@ -23,6 +33,12 @@ import { loadSettings, type OrchestratorSettings } from "../src/settings.ts";
 import type { PlanAuditSpec, PlanNodeSpec, PlanSpec, RunProgress } from "../src/types.ts";
 
 const TOOL_NAME = "run_goal_plan";
+const AUTO_CUSTOM_TYPE = "pi-goal-orchestrator:auto";
+
+/** A run_goal_plan call is executing in this session; settle hooks must not start another. */
+let runInFlight = false;
+/** Signatures already nudged in this runtime, even if the marker file could not be written. */
+const queuedSignatures = new Set<string>();
 
 function childSession(): boolean {
 	const depth = Number(process.env.PI_SUBAGENT_DEPTH);
@@ -97,12 +113,13 @@ function createPlanTool(pi: ExtensionAPI) {
 	name: TOOL_NAME,
 	label: "Run Goal Plan",
 	description:
-		"Execute a dependency graph of subagents for the focused goal. Each node runs in its own context and is independently audited before dependent nodes start. Use this when a goal has independent branches (e.g. contract -> backend + frontend -> integrated verification). Do not use it for a single small edit.",
+		"Execute a dependency graph of subagents for the focused goal. Each node runs in its own context and is independently audited before dependent nodes start. Pass nodes for a custom DAG, or omit them (or pass tasks: true) to run the focused goal's pending tasks as an audited chain. Goal work must happen here, not inline.",
 	promptSnippet: "Run a DAG of audited subagents for the focused goal.",
 	promptGuidelines: [
-		"Use run_goal_plan when the focused goal contains independent work that can run in smaller contexts; keep this session for planning, review and final decisions.",
+		"Every unit of goal work must run through run_goal_plan; this session only plans, reviews and reports.",
+		'When the focused goal already has a task list, call run_goal_plan with { "tasks": true } instead of inventing a DAG.',
 		"Plan nodes must be small and have explicit dependencies. A node only unblocks dependents after its independent audit approves.",
-		"Put the contract/interface node first, then parallel implementation nodes, then an integrated verification node.",
+		"For a custom DAG, put the contract/interface node first, then parallel implementation nodes, then an integrated verification node.",
 		"Use cheaper models per node when the task is mechanical; reserve the strong model for planning and ambiguous work.",
 		"After the run, inspect the compact report and artifacts, update the goal tasks, then request goal completion; the pi-goal-x auditor remains the final authority.",
 	],
@@ -112,10 +129,17 @@ function createPlanTool(pi: ExtensionAPI) {
 			objective: Type.Optional(
 				Type.String({ description: "Goal objective. Defaults to the focused pi-goal objective." }),
 			),
-			nodes: Type.Array(
-				Type.Object(
-					{
-						id: Type.String({ description: "Stable short id, e.g. contract, backend, frontend, verify." }),
+			tasks: Type.Optional(
+				Type.Boolean({
+					description:
+						"Derive nodes from the focused goal's pending tasks (sequential chain + integrated verification). Mutually exclusive with nodes. Defaults to true when nodes is omitted.",
+				}),
+			),
+			nodes: Type.Optional(
+				Type.Array(
+					Type.Object(
+						{
+							id: Type.String({ description: "Stable short id, e.g. contract, backend, frontend, verify." }),
 						title: Type.Optional(Type.String()),
 						prompt: Type.String({ description: "Self-contained worker brief. Do not assume parent transcript." }),
 						deps: Type.Optional(Type.Array(Type.String(), { description: "Node ids that must finish first." })),
@@ -137,7 +161,8 @@ function createPlanTool(pi: ExtensionAPI) {
 					},
 					{ additionalProperties: false },
 				),
-				{ minItems: 1, maxItems: 32 },
+					{ minItems: 1, maxItems: 32 },
+				),
 			),
 			max_concurrent: Type.Optional(Type.Number({ description: "Parallel worker slots. Default 3, max 16." })),
 			fail_fast: Type.Optional(
@@ -172,10 +197,36 @@ function createPlanTool(pi: ExtensionAPI) {
 
 		const settings = loadSettings(ctx.cwd);
 		const focused = readFocusedGoal(ctx);
+
+		const explicitNodes = (params.nodes ?? []) as PlanNodeSpec[];
+		if (params.tasks === true && explicitNodes.length > 0) {
+			return {
+				content: [{ type: "text" as const, text: "Plan rejected: pass either nodes or tasks: true, not both." }],
+				details: { error: true },
+				isError: true,
+			};
+		}
+		let nodes = explicitNodes;
+		if (nodes.length === 0) {
+			if (!focused) {
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: "Plan rejected: no nodes and no focused goal. Focus a pi-goal or pass an explicit DAG.",
+						},
+					],
+					details: { error: true },
+					isError: true,
+				};
+			}
+			nodes = nodesFromGoalTasks(focused);
+		}
+
 		const spec: PlanSpec = {
 			goal_id: params.goal_id ?? focused?.id,
 			objective: params.objective ?? focused?.objective,
-			nodes: params.nodes as PlanNodeSpec[],
+			nodes,
 			max_concurrent: params.max_concurrent,
 			fail_fast: params.fail_fast,
 			audit: params.audit as PlanAuditSpec | undefined,
@@ -209,6 +260,7 @@ function createPlanTool(pi: ExtensionAPI) {
 			notify(ctx, `Goal orchestration started: ${plan.nodes.length} nodes, ${plan.maxConcurrent} parallel.`);
 
 			let lastUpdate = 0;
+			runInFlight = true;
 			const result = await runPlan({
 				ctx,
 				plan,
@@ -264,10 +316,65 @@ function createPlanTool(pi: ExtensionAPI) {
 				isError: true,
 			};
 		} finally {
+			runInFlight = false;
 			bridge.close();
 		}
 	},
 	});
+}
+
+function orchestrationGuideline(goal: NonNullable<ReturnType<typeof readFocusedGoal>>, runs: ReturnType<typeof listRuns>): string {
+	const signature = objectiveSignature(goal.objective);
+	const orchestrated = runs.some(
+		(run) => run.goalId === goal.id && objectiveSignature(run.objective) === signature,
+	);
+	if (orchestrated) {
+		return (
+			"Goal orchestration: this goal objective already has an orchestration run. Read its report and artifacts " +
+			"before starting new work; do not re-plan the same objective unless the user asks."
+		);
+	}
+	return (
+		"Goal orchestration: this active goal has no orchestration run yet. Before doing any goal work, your first " +
+		'action must be run_goal_plan. If the goal has a task list, call it with { "tasks": true }; otherwise pass ' +
+		"an explicit DAG (contract/interface first, then parallel branches, then integrated verification). " +
+		"write/edit are blocked until the goal has a run. Keep this context for planning and review; do not execute " +
+		"worker-sized tasks inline."
+	);
+}
+
+function evaluateAutoStart(
+	ctx: ExtensionContext,
+	settings: OrchestratorSettings,
+	goal: NonNullable<ReturnType<typeof readFocusedGoal>>,
+	reason: string,
+	force: boolean,
+): AutoStartDecision {
+	const decision = decideAutoStart({
+		goal,
+		enabled: settings.autoOrchestrate,
+		runs: listRuns(ctx.cwd, settings.artifactsRoot),
+		marker: readAutoMarker(ctx.cwd, settings.artifactsRoot, goal.id),
+		inFlight: runInFlight,
+		force,
+	});
+	if (!decision.start) return decision;
+	const queueKey = `${goal.id}:${decision.signature}`;
+	if (!force && queuedSignatures.has(queueKey)) {
+		return { ...decision, start: false, reason: "planning already queued in this session" };
+	}
+	queuedSignatures.add(queueKey);
+	try {
+		writeAutoMarker(ctx.cwd, settings.artifactsRoot, {
+			goalId: goal.id,
+			signature: decision.signature,
+			triggeredAt: new Date().toISOString(),
+			reason,
+		});
+	} catch {
+		// The in-memory signature guard still prevents a loop in this session.
+	}
+	return decision;
 }
 
 export default function goalOrchestrator(pi: ExtensionAPI) {
@@ -279,12 +386,92 @@ export default function goalOrchestrator(pi: ExtensionAPI) {
 		if (!settings.injectGoalGuidance) return;
 		const focused = readFocusedGoal(ctx);
 		if (!focused || focused.status !== "active") return;
-		const guideline =
-			"Goal orchestration: when the focused goal has independent branches, use run_goal_plan with a DAG. " +
-			"Keep this context for planning and review; do not execute worker-sized tasks inline.";
+		const guideline = orchestrationGuideline(focused, listRuns(ctx.cwd, settings.artifactsRoot));
 		if (!_event.systemPromptOptions.promptGuidelines.includes(guideline)) {
 			_event.systemPromptOptions.promptGuidelines.push(guideline);
 		}
+	});
+
+	// Goal work belongs to subagents. Until the focused goal has an orchestration
+	// run, the main session may read, plan and dispatch, but not edit files.
+	pi.on("tool_call", (event, ctx) => {
+		if (childSession() || (event.toolName !== "write" && event.toolName !== "edit")) return;
+		const settings = loadSettings(ctx.cwd);
+		if (!settings.enforceSubagentWork) return;
+		const goal = readFocusedGoal(ctx);
+		if (!goal || goal.status !== "active") return;
+		const signature = objectiveSignature(goal.objective);
+		const orchestrated = listRuns(ctx.cwd, settings.artifactsRoot).some(
+			(run) => run.goalId === goal.id && objectiveSignature(run.objective) === signature,
+		);
+		if (orchestrated) return;
+		return {
+			block: true,
+			reason:
+				"Goal work must run in subagents. Call run_goal_plan first " +
+				'({"tasks": true} when the goal already has a task list), then edit only follow-up fixes after the run. ' +
+				"Set enforceSubagentWork to false to disable this guard.",
+		};
+	});
+
+	// A decided goal whose turn settles without a plan is continued exactly once
+	// with a hidden planning message. Continuing here (instead of queueing a new
+	// run at `agent_settled`) keeps pi-goal-x's own continuation from racing us
+	// into a duplicate run for the same objective.
+	pi.on("agent_before_settle", (event, ctx) => {
+		if (event.outcome !== "completed" || childSession()) return;
+		if (event.continue || event.context.pendingMessages.length > 0) return;
+		const settings = loadSettings(ctx.cwd);
+		if (!settings.autoOrchestrate) return;
+		const goal = readFocusedGoal(ctx);
+		if (!goal || goal.status !== "active") return;
+		const decision = evaluateAutoStart(ctx, settings, goal, "newly decided goal", false);
+		if (!decision.start) return;
+		notify(ctx, `Goal orchestration auto-started for ${goal.id} (${decision.reason}).`);
+		return {
+			entries: [
+				{
+					type: "custom_message" as const,
+					customType: AUTO_CUSTOM_TYPE,
+					content: autoStartMessage(goal, decision.reason),
+					display: false,
+				},
+			],
+			continue: true,
+		};
+	});
+
+	pi.registerCommand("orchestrate", {
+		description: "Plan and execute the focused goal as an audited DAG of subagents now",
+		handler: async (_args, ctx) => {
+			if (childSession()) {
+				notify(ctx, "Orchestration is unavailable inside a subagent.", "warning");
+				return;
+			}
+			const settings = loadSettings(ctx.cwd);
+			const goal = readFocusedGoal(ctx);
+			if (!goal) {
+				notify(ctx, "No focused goal. Create or focus one in pi-goal-x first.", "warning");
+				return;
+			}
+			if (goal.status !== "active") {
+				notify(ctx, `Focused goal is ${goal.status ?? "not active"}; resume it before orchestrating.`, "warning");
+				return;
+			}
+			if (!settings.autoOrchestrate) {
+				notify(ctx, "autoOrchestrate is disabled; /orchestrate still queues the planning turn.", "info");
+			}
+			const decision = evaluateAutoStart(ctx, settings, goal, "requested by /orchestrate", true);
+			if (!decision.start) {
+				notify(ctx, `Nothing to orchestrate: ${decision.reason}.`, "warning");
+				return;
+			}
+			pi.sendMessage(
+				{ customType: AUTO_CUSTOM_TYPE, content: autoStartMessage(goal, decision.reason), display: false },
+				{ triggerTurn: true, deliverAs: "followUp" },
+			);
+			notify(ctx, `Goal orchestration queued for ${goal.id}.`);
+		},
 	});
 
 	pi.registerCommand("orchestrate-status", {

@@ -16,6 +16,8 @@ export interface FocusedGoal {
 	objective: string;
 	status?: string;
 	sisyphus?: boolean;
+	/** pi-goal-x execution preference; false means no autonomous continuation. */
+	autoContinue?: boolean;
 	path: string;
 	/** Pending tasks from the goal file, when present. */
 	tasks: Array<{ id: string; title: string; status: string }>;
@@ -31,6 +33,7 @@ interface GoalHeader {
 	objective?: string;
 	status?: string;
 	sisyphus?: boolean;
+	autoContinue?: boolean;
 	taskList?: {
 		tasks?: Array<{
 			id?: string;
@@ -125,6 +128,7 @@ export function readFocusedGoal(ctx: ExtensionContext): FocusedGoal | null {
 			objective: typeof header.objective === "string" ? header.objective : "",
 			status: header.status,
 			sisyphus: header.sisyphus,
+			autoContinue: typeof header.autoContinue === "boolean" ? header.autoContinue : undefined,
 			path: filePath,
 			tasks,
 		};
@@ -152,6 +156,7 @@ export function readGoalById(cwd: string, id: string): FocusedGoal | null {
 			objective: typeof header.objective === "string" ? header.objective : "",
 			status: header.status,
 			sisyphus: header.sisyphus,
+			autoContinue: typeof header.autoContinue === "boolean" ? header.autoContinue : undefined,
 			path: filePath,
 			tasks,
 		};

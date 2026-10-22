@@ -6,7 +6,7 @@ Date: 2026-10-22. Every test below loaded the extension via `pi -e` and used the
 
 ```bash
 npm run check   # tsc --noEmit, 0 errors
-npm test        # 35/35 tests
+npm test        # 52/52 tests
 ```
 
 Coverage:
@@ -18,7 +18,15 @@ Coverage:
 - compact and truncated report;
 - fake RPC: ping, spawn, completion, consume, reply race, timeout, error;
 - fake scheduler: parallel fan-out, audit rejection retry, blocking, missing outputs, fail-fast;
-- goal header and `pi-goal-focus` entry parsing.
+- goal header and `pi-goal-focus` entry parsing;
+- task-mode planning: one audited node per pending task chained in order, integrated
+  verification node, single objective node without tasks, derived ids pass plan validation;
+- automatic trigger decisions: disabled/unfocused/paused/empty/in-flight/auto-continue opt-out,
+  force bypass, one nudge per objective signature, re-plan after a tweak, no auto-retry
+  of a failed run, marker roundtrip and malformed run files;
+- extension wiring with a fake API: tool/command/hook registration, exactly one boundary
+  continuation for a decided goal, opt-out respected, and the write/edit guard opening
+  after a completed run.
 
 ## 2. Real DAG with parallelism
 

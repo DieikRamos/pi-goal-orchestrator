@@ -1,6 +1,6 @@
 # pi-goal-orchestrator
 
-Companion extension for [`pi-goal-x`](https://github.com/tmonk/pi-goal-x): it turns the focused goal into an **orchestrator session**. The main agent plans and reviews; workers run in separate contexts; each node only unblocks its dependents after an **independent audit**.
+Companion extension for [`pi-goal-x`](https://github.com/tmonk/pi-goal-x): it turns the focused goal into an **orchestrator session**. **All goal work runs in subagents**; the main session only plans, reviews and reports, so its context stays small. Each node only unblocks its dependents after an **independent audit**.
 
 ```
 contract
@@ -30,7 +30,60 @@ pi -e ./pi-goal-orchestrator
 
 ## Usage
 
-With a focused goal in `pi-goal-x`, ask the agent to execute the plan:
+### Automatic (default)
+
+Once a goal is **decided** in `pi-goal-x` (focused and `active`), the goal's
+tasks are always executed by subagents:
+
+1. **Delegation is enforced.** Until the goal objective has an orchestration
+run, the main session may read, plan and dispatch, but `write`/`edit` calls are
+blocked with a reason that points at `run_goal_plan`
+(`"enforceSubagentWork": false` disables the guard).
+2. Every turn of a goal that has no run yet gets a prompt guideline: the first
+action must be `run_goal_plan`, using `{ "tasks": true }` when the goal already
+has a task list.
+3. If the turn ends without a plan, the final boundary (`agent_before_settle`)
+continues the run **once** with a hidden planning message. Continuing at the
+boundary (instead of queueing a new run) prevents a race with `pi-goal-x`'s own
+continuation into a duplicate run.
+4. The nudge is recorded in `.pi/goals/orchestrator/auto/<goalId>.json`; it is
+not repeated for the same objective, and it never fires while another
+continuation or queued message is waiting, or for a goal with
+`autoContinue: false` (`/goal` opt-out). A tweaked objective is planned again; a
+failed run is **not** retried automatically.
+
+Disable the automatic parts with `"autoOrchestrate": false` (and the guard
+with `"enforceSubagentWork": false`) in the settings file.
+
+### Task mode: `tasks: true`
+
+The simplest plan has no DAG at all. When the focused goal already has a task
+list, `run_goal_plan` derives the plan from it:
+
+- one **audited node per pending task**, in document order (a sequential chain);
+- a final **integrated verification** node depending on the last task;
+- a goal without pending tasks becomes a single objective node.
+
+```json
+{ "tasks": true }
+```
+
+`nodes` and `tasks: true` are mutually exclusive. For parallel branches or
+worktree isolation, pass an explicit `nodes` DAG.
+
+### Manual
+
+Power users can force a planning turn at any time:
+
+```text
+/orchestrate
+```
+
+It bypasses the run/marker guards (still refuses while a run is in flight or
+the goal is not active). `/orchestrate` works even when `autoOrchestrate` is
+disabled.
+
+Or ask the agent directly, with a more specific shape:
 
 ```text
 Execute the goal using run_goal_plan. Create a contract node, then backend and
@@ -101,9 +154,10 @@ The final `pi-goal-x` auditor remains the final authority. The DAG report is evi
   nodes/<id>/result-attempt-1.md
   nodes/<id>/audit-attempt-1.md
   nodes/<id>/node.json
+  ../auto/<goalId>.json   # last automatic planning nudge
 ```
 
-`/orchestrate-status` shows the latest run. `/orchestrate-settings` shows the resolved configuration.
+`/orchestrate-status` shows the latest run. `/orchestrate-settings` shows the resolved configuration. `/orchestrate` queues a planning turn for the focused goal now.
 
 ## Configuration
 
@@ -113,6 +167,8 @@ Optional, in `.pi/pi-goal-orchestrator.json` (project) or `~/.pi/agent/pi-goal-o
 {
   "maxConcurrent": 3,
   "failFast": true,
+  "autoOrchestrate": true,
+  "enforceSubagentWork": true,
   "audit": {
     "enabled": true,
     "model": "opencode-go/deepseek-v4.1-flash"
@@ -142,10 +198,13 @@ Tool parameters override the configuration.
 - The node auditor uses only `read`, `grep`, `find`, `ls`, `bash` and an empty resource loader; it does not inherit project skills or extensions.
 - Workers do not inherit the parent history (`inheritContext: false`).
 - `run_goal_plan` is blocking: the orchestrator turn waits until the DAG stabilizes. Press `Esc` to abort; running agents receive `stop`.
+- The automatic trigger is bounded: at most one planning message per goal objective and one run per objective. It never retries a failed run on its own.
+- `enforceSubagentWork` blocks `write`/`edit` in the main session while a focused active goal has no run for its current objective. It does not police `bash` redirection; a determined model can still bypass it.
 
 ## MVP limitations
 
 - It does not automatically update `pi-goal-x` tasks; the orchestrator should call `update_goal_task` after the report.
+- Task mode chains pending tasks sequentially; it does not infer parallelism between tasks.
 - It does not automatically merge worktree branches; an integration/merge node must do that explicitly.
 - It has no dashboard of its own; follow progress through the `pi-subagents` widget, `/agents`, and the artifacts.
 - The report is textual; there is no structured per-node schema (the auditor reads the real files).
