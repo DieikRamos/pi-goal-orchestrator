@@ -17,9 +17,15 @@ contract
 ## Instalar
 
 ```bash
-pi install /home/dieikramos/code-projects/pi-goal-orchestrator
-# ou, durante o desenvolvimento:
-pi -e /home/dieikramos/code-projects/pi-goal-orchestrator
+# instalação direto do repositório:
+pi install git:github.com/DieikRamos/pi-goal-orchestrator
+
+# ou, a partir de um clone local:
+git clone https://github.com/DieikRamos/pi-goal-orchestrator
+pi install ./pi-goal-orchestrator
+
+# durante o desenvolvimento, sem instalar:
+pi -e ./pi-goal-orchestrator
 ```
 
 ## Uso
