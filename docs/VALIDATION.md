@@ -6,7 +6,7 @@ Date: 2026-10-22. Every test below loaded the extension via `pi -e` and used the
 
 ```bash
 npm run check   # tsc --noEmit, 0 errors
-npm test        # 52/52 tests
+npm test        # 55/55 tests
 ```
 
 Coverage:
@@ -25,8 +25,9 @@ Coverage:
   force bypass, one nudge per objective signature, re-plan after a tweak, no auto-retry
   of a failed run, marker roundtrip and malformed run files;
 - extension wiring with a fake API: tool/command/hook registration, exactly one boundary
-  continuation for a decided goal, opt-out respected, and the write/edit guard opening
-  after a completed run.
+  continuation for a decided goal, opt-out respected, the write/edit guard opening
+  after a completed run, and `/orchestrate-mode` toggling project settings;
+- settings mutations: atomic project-settings write preserving unknown keys, no temp file left behind.
 
 ## 2. Real DAG with parallelism
 

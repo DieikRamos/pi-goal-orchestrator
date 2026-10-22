@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { test } from "node:test";
-import { applySettingsLayer, DEFAULT_SETTINGS } from "../src/settings.ts";
+import { applySettingsLayer, DEFAULT_SETTINGS, projectSettingsPath, writeProjectSettings } from "../src/settings.ts";
 
 test("defaults are valid", () => {
 	assert.equal(DEFAULT_SETTINGS.maxConcurrent, 3);
@@ -53,4 +56,24 @@ test("project layer wins over global without mutating the base", () => {
 	assert.equal(project.maxConcurrent, 2);
 	assert.equal(global.audit.model, "global/m");
 	assert.notEqual(project, global);
+});
+
+test("writeProjectSettings merges atomically and preserves unknown keys", () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "orchestrator-settings-"));
+	try {
+		fs.mkdirSync(path.join(cwd, ".pi"), { recursive: true });
+		fs.writeFileSync(
+			projectSettingsPath(cwd),
+			JSON.stringify({ autoOrchestrate: false, maxConcurrent: 4, fromNewerBuild: { keep: true } }),
+		);
+		const updated = writeProjectSettings(cwd, { enforceSubagentWork: false });
+		assert.equal(updated.autoOrchestrate, false);
+		assert.equal(updated.enforceSubagentWork, false);
+		assert.equal(updated.maxConcurrent, 4);
+		const raw = JSON.parse(fs.readFileSync(projectSettingsPath(cwd), "utf8")) as Record<string, unknown>;
+		assert.deepEqual(raw.fromNewerBuild, { keep: true });
+		assert.equal(fs.readdirSync(path.join(cwd, ".pi")).some((name) => name.includes(".tmp-")), false);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
 });

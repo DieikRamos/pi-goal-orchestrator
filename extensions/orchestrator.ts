@@ -20,6 +20,7 @@ import {
 	decideAutoStart,
 	listRuns,
 	objectiveSignature,
+	parseModeArgs,
 	readAutoMarker,
 	writeAutoMarker,
 } from "../src/auto.ts";
@@ -29,7 +30,7 @@ import { nodesFromGoalTasks } from "../src/tasks.ts";
 import { buildRunReport } from "../src/prompt.ts";
 import { SubagentBridge, RpcError } from "../src/rpc.ts";
 import { runPlan } from "../src/scheduler.ts";
-import { loadSettings, type OrchestratorSettings } from "../src/settings.ts";
+import { loadSettings, writeProjectSettings, type OrchestratorSettings } from "../src/settings.ts";
 import type { PlanAuditSpec, PlanNodeSpec, PlanSpec, RunProgress } from "../src/types.ts";
 
 const TOOL_NAME = "run_goal_plan";
@@ -471,6 +472,50 @@ export default function goalOrchestrator(pi: ExtensionAPI) {
 				{ triggerTurn: true, deliverAs: "followUp" },
 			);
 			notify(ctx, `Goal orchestration queued for ${goal.id}.`);
+		},
+	});
+
+	pi.registerCommand("orchestrate-mode", {
+		description:
+			"Enable/disable the automatic goal delegation (on|off|toggle|status, optionally scoped: auto|enforce|all)",
+		handler: async (_args, ctx) => {
+			const { scope, value } = parseModeArgs(_args);
+			if (value === "invalid") {
+				notify(ctx, "Usage: /orchestrate-mode [auto|enforce|all] [on|off|toggle|status]", "warning");
+				return;
+			}
+			const settings = loadSettings(ctx.cwd);
+			if (value === "status") {
+				notify(
+					ctx,
+					[
+						`autoOrchestrate: ${settings.autoOrchestrate ? "on" : "off"}`,
+						`enforceSubagentWork: ${settings.enforceSubagentWork ? "on" : "off"}`,
+					].join("\n"),
+				);
+				return;
+			}
+			const current =
+				scope === "auto"
+					? settings.autoOrchestrate
+					: scope === "enforce"
+						? settings.enforceSubagentWork
+						: settings.autoOrchestrate && settings.enforceSubagentWork;
+			const enabled = value === "toggle" ? !current : value === "on";
+			const patch =
+				scope === "auto"
+					? { autoOrchestrate: enabled }
+					: scope === "enforce"
+						? { enforceSubagentWork: enabled }
+						: { autoOrchestrate: enabled, enforceSubagentWork: enabled };
+			const updated = writeProjectSettings(ctx.cwd, patch);
+			notify(
+				ctx,
+				[
+					`Goal auto-delegation ${scope === "all" ? (enabled ? "enabled" : "disabled") : `${scope} ${enabled ? "on" : "off"}`} (project settings).`,
+					`autoOrchestrate: ${updated.autoOrchestrate ? "on" : "off"}, enforceSubagentWork: ${updated.enforceSubagentWork ? "on" : "off"}.`,
+				].join("\n"),
+			);
 		},
 	});
 

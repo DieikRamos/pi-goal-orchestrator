@@ -53,7 +53,19 @@ continuation or queued message is waiting, or for a goal with
 failed run is **not** retried automatically.
 
 Disable the automatic parts with `"autoOrchestrate": false` (and the guard
-with `"enforceSubagentWork": false`) in the settings file.
+with `"enforceSubagentWork": false`) in the settings file, or at runtime:
+
+```text
+/orchestrate-mode              # toggle both on/off (default)
+/orchestrate-mode on|off       # set both
+/orchestrate-mode status       # show the current state
+/orchestrate-mode auto off     # only the automatic trigger
+/orchestrate-mode enforce on   # only the write/edit guard
+```
+
+`/orchestrate-mode` writes the **project** settings file
+(`.pi/pi-goal-orchestrator.json`), preserving unrelated keys, and takes effect
+immediately.
 
 ### Task mode: `tasks: true`
 
@@ -157,7 +169,7 @@ The final `pi-goal-x` auditor remains the final authority. The DAG report is evi
   ../auto/<goalId>.json   # last automatic planning nudge
 ```
 
-`/orchestrate-status` shows the latest run. `/orchestrate-settings` shows the resolved configuration. `/orchestrate` queues a planning turn for the focused goal now.
+`/orchestrate-status` shows the latest run. `/orchestrate-settings` shows the resolved configuration. `/orchestrate` queues a planning turn for the focused goal now. `/orchestrate-mode` enables/disables the automatic delegation.
 
 ## Configuration
 

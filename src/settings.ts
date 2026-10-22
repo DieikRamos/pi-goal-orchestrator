@@ -134,3 +134,23 @@ export function loadSettings(cwd: string, homeDir = os.homedir()): OrchestratorS
 	settings = applySettingsLayer(settings, readJson(projectSettingsPath(cwd)));
 	return settings;
 }
+
+/**
+ * Merge a patch into the project settings file, preserving keys this build
+ * does not know about (a newer version may have written them). Atomic: a crash
+ * mid-write cannot leave a truncated JSON file behind.
+ */
+export function writeProjectSettings(cwd: string, patch: Record<string, unknown>): OrchestratorSettings {
+	const file = projectSettingsPath(cwd);
+	const current = readJson(file);
+	const merged: Record<string, unknown> =
+		current && typeof current === "object" && !Array.isArray(current)
+			? { ...(current as Record<string, unknown>) }
+			: {};
+	Object.assign(merged, patch);
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	const temp = `${file}.tmp-${process.pid}`;
+	fs.writeFileSync(temp, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+	fs.renameSync(temp, file);
+	return loadSettings(cwd);
+}

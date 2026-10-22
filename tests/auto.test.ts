@@ -9,6 +9,7 @@ import {
 	decideAutoStart,
 	listRuns,
 	objectiveSignature,
+	parseModeArgs,
 	readAutoMarker,
 	safeSegment,
 	writeAutoMarker,
@@ -119,6 +120,19 @@ test("the planning message is self-contained and points at run_goal_plan", () =>
 	assert.match(message, /"tasks": true/);
 	assert.match(message, /Add CSV export/);
 	assert.match(message, /goal-1/);
+});
+
+test("orchestrate-mode arguments parse scope and value", () => {
+	assert.deepEqual(parseModeArgs(undefined), { scope: "all", value: "toggle" });
+	assert.deepEqual(parseModeArgs("  "), { scope: "all", value: "toggle" });
+	assert.deepEqual(parseModeArgs("off"), { scope: "all", value: "off" });
+	assert.deepEqual(parseModeArgs("status"), { scope: "all", value: "status" });
+	assert.deepEqual(parseModeArgs("auto"), { scope: "auto", value: "status" });
+	assert.deepEqual(parseModeArgs("auto on"), { scope: "auto", value: "on" });
+	assert.deepEqual(parseModeArgs("enforce toggle"), { scope: "enforce", value: "toggle" });
+	assert.deepEqual(parseModeArgs("all off"), { scope: "all", value: "off" });
+	assert.deepEqual(parseModeArgs("bogus"), { scope: "all", value: "invalid" });
+	assert.deepEqual(parseModeArgs("auto later"), { scope: "auto", value: "invalid" });
 });
 
 test("marker paths stay inside the artifacts root", () => {

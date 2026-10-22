@@ -143,6 +143,23 @@ export function listRuns(cwd: string, artifactsRoot: string): RunSummary[] {
 	return runs;
 }
 
+export type ModeScope = "all" | "auto" | "enforce";
+export type ModeValue = "on" | "off" | "toggle" | "status" | "invalid";
+
+/** Parse `/orchestrate-mode [scope] [value]` without a TUI. Exported for tests. */
+export function parseModeArgs(raw: string | undefined): { scope: ModeScope; value: ModeValue } {
+	const tokens = (raw ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+	if (tokens.length === 0) return { scope: "all", value: "toggle" };
+	const first = tokens[0] as string;
+	const scope: ModeScope = first === "auto" || first === "enforce" || first === "all" ? (first as ModeScope) : "all";
+	const valueToken = scope === "all" && first !== "all" ? first : tokens[1];
+	if (valueToken === undefined) return { scope, value: scope === "all" ? "toggle" : "status" };
+	if (valueToken === "on" || valueToken === "off" || valueToken === "toggle" || valueToken === "status") {
+		return { scope, value: valueToken };
+	}
+	return { scope, value: "invalid" };
+}
+
 /** The planning message the orchestrator receives when a goal is decided. */
 export function autoStartMessage(goal: { id: string; objective: string }, reason: string): string {
 	return [
