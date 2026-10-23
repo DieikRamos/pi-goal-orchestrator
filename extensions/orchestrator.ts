@@ -18,7 +18,6 @@ import { makeRunId, readLatestRun, RunArtifacts } from "../src/artifacts.ts";
 import { PlanValidationError, normalizePlan } from "../src/dag.ts";
 import {
 	formatPlanList,
-	nodeSpecFromNormalized,
 	PlanStore,
 	planSummaryLine,
 	resolveResumeTarget,
@@ -28,9 +27,16 @@ import {
 import { buildPlanningPrompt, buildResumePrompt, buildRunReport } from "../src/prompt.ts";
 import { SubagentBridge, RpcError } from "../src/rpc.ts";
 import { runPlan } from "../src/scheduler.ts";
-import { loadSettings, type OrchestratorSettings } from "../src/settings.ts";
+import {
+	isThinkingLevel,
+	loadSettings,
+	parseWorkerArgs,
+	resolveSubagentDefaults,
+	writeProjectSettings,
+	type OrchestratorSettings,
+} from "../src/settings.ts";
 import { OrchestratorWidget } from "../src/ui.ts";
-import type { PlanAuditSpec, PlanNodeSpec, PlanSpec, RunProgress } from "../src/types.ts";
+import type { PlanAuditSpec, PlanNodeSpec, PlanSpec, RunProgress, ThinkingLevel } from "../src/types.ts";
 
 const PLAN_TOOL = "orchestrator_plan";
 const RUN_TOOL = "orchestrator_run";
@@ -68,7 +74,19 @@ function progressText(progress: RunProgress): string {
 	].join("\n");
 }
 
-function applyDefaults(spec: PlanSpec, settings: OrchestratorSettings): PlanSpec {
+function sessionDefaults(ctx: ExtensionContext): { model?: string; thinkingLevel?: ThinkingLevel } {
+	return {
+		model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined,
+		thinkingLevel: isThinkingLevel(ctx.thinkingLevel) ? ctx.thinkingLevel : undefined,
+	};
+}
+
+function applyDefaults(
+	spec: PlanSpec,
+	settings: OrchestratorSettings,
+	inherited: { model?: string; thinkingLevel?: ThinkingLevel } = {},
+): PlanSpec {
+	const workerDefaults = resolveSubagentDefaults(settings, inherited);
 	return {
 		...spec,
 		max_concurrent: spec.max_concurrent ?? settings.maxConcurrent,
@@ -80,8 +98,8 @@ function applyDefaults(spec: PlanSpec, settings: OrchestratorSettings): PlanSpec
 		},
 		nodes: spec.nodes.map((node) => ({
 			...node,
-			model: node.model ?? settings.worker.model,
-			thinking_level: node.thinking_level ?? settings.worker.thinkingLevel,
+			model: node.model ?? workerDefaults.model,
+			thinking_level: node.thinking_level ?? workerDefaults.thinkingLevel,
 			timeout_seconds: node.timeout_seconds ?? settings.defaultTimeoutSeconds,
 			max_attempts: node.max_attempts ?? settings.defaultMaxAttempts,
 		})),
@@ -243,7 +261,9 @@ function createPlanTool(pi: ExtensionAPI) {
 				description: params.description,
 				requirements: params.requirements,
 				notes: params.notes,
-				nodes: plan.nodes.map(nodeSpecFromNormalized),
+				// Persist the authored nodes: model/thinking/timeout defaults are
+				// resolved at run time, so the plan follows the current settings.
+				nodes,
 				maxConcurrent: plan.maxConcurrent,
 				failFast: plan.failFast,
 			});
@@ -383,6 +403,7 @@ function createRunTool(pi: ExtensionAPI) {
 							audit: params.audit as PlanAuditSpec | undefined,
 						},
 						settings,
+						sessionDefaults(ctx),
 					),
 				);
 			} catch (error) {
@@ -544,6 +565,46 @@ export default function orchestrator(pi: ExtensionAPI) {
 				{ triggerTurn: true, deliverAs: "followUp" },
 			);
 			notify(ctx, "Planning turn started. The plan will get a number; run it with /orchestrator-resume <n>.");
+		},
+	});
+
+	pi.registerCommand("orchestrator-model", {
+		description: "Set the subagent model and thinking level (defaults: inherit the orchestrator)",
+		handler: async (_args, ctx) => {
+			const parsed = parseWorkerArgs(_args);
+			if (parsed.error) {
+				notify(ctx, parsed.error, "warning");
+				return;
+			}
+			const settings = loadSettings(ctx.cwd);
+			const inherited = sessionDefaults(ctx);
+			const usage =
+				"Usage: /orchestrator-model [model] [thinking] | model <model|default> | thinking <level|default> | default";
+			if (parsed.status) {
+				notify(
+					ctx,
+					[
+						`Subagent model: ${settings.worker.model ?? `inherit (${inherited.model ?? "orchestrator default"})`}`,
+						`Subagent thinking: ${settings.worker.thinkingLevel ?? `inherit (${inherited.thinkingLevel ?? "pi default"})`}`,
+						"",
+						usage,
+					].join("\n"),
+				);
+				return;
+			}
+			const worker: Record<string, unknown> = {};
+			if (parsed.model !== undefined) worker.model = parsed.model ?? undefined;
+			if (parsed.thinking !== undefined) worker.thinkingLevel = parsed.thinking ?? undefined;
+			const updated = writeProjectSettings(ctx.cwd, { worker });
+			const effective = resolveSubagentDefaults(updated, inherited);
+			notify(
+				ctx,
+				[
+					"Subagent defaults updated (project settings).",
+					`- model: ${effective.model ?? "(pi-subagents default)"}`,
+					`- thinking: ${effective.thinkingLevel ?? "(pi default)"}`,
+				].join("\n"),
+			);
 		},
 	});
 

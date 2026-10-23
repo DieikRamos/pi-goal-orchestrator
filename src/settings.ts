@@ -42,6 +42,75 @@ export const DEFAULT_SETTINGS: OrchestratorSettings = {
 
 const THINKING = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh"]);
 
+export const THINKING_LEVELS: readonly ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+
+export function isThinkingLevel(value: unknown): value is ThinkingLevel {
+	return typeof value === "string" && THINKING.has(value as ThinkingLevel);
+}
+
+export interface WorkerArgs {
+	/** Show the effective values instead of changing anything. */
+	status: boolean;
+	/** `null` clears the override so the orchestrator value is inherited. */
+	model?: string | null;
+	thinking?: ThinkingLevel | null;
+	error?: string;
+}
+
+/**
+ * Parse `/orchestrator-model`:
+ *   (none) | status
+ *   <provider/model> [off|minimal|low|medium|high|xhigh]
+ *   model <provider/model|default> [thinking]
+ *   thinking <level|default>
+ *   default | reset | inherit
+ */
+export function parseWorkerArgs(raw: string | undefined): WorkerArgs {
+	const tokens = (raw ?? "").trim().split(/\s+/).filter(Boolean);
+	if (tokens.length === 0 || tokens[0] === "status") return { status: true };
+	const [first, ...rest] = tokens as [string, ...string[]];
+	const usage =
+		"Usage: /orchestrator-model [model] [thinking] | model <model|default> | thinking <level|default> | default";
+	if (first === "default" || first === "reset" || first === "inherit") {
+		return rest.length > 0 ? { status: false, error: usage } : { status: false, model: null, thinking: null };
+	}
+	const parseThinking = (value: string): ThinkingLevel | null | "invalid" => {
+		if (value === "default" || value === "inherit" || value === "reset") return null;
+		return isThinkingLevel(value) ? value : "invalid";
+	};
+	if (first === "model") {
+		const modelToken = rest[0];
+		if (!modelToken) return { status: false, error: usage };
+		const model = modelToken === "default" ? null : modelToken;
+		if (rest.length === 1) return { status: false, model };
+		if (rest.length !== 2) return { status: false, error: usage };
+		const thinking = parseThinking(rest[1] as string);
+		if (thinking === "invalid") return { status: false, error: `Invalid thinking level "${rest[1]}". ${usage}` };
+		return { status: false, model, thinking };
+	}
+	if (first === "thinking") {
+		if (rest.length !== 1) return { status: false, error: usage };
+		const thinking = parseThinking(rest[0] as string);
+		if (thinking === "invalid") return { status: false, error: `Invalid thinking level "${rest[0]}". ${usage}` };
+		return { status: false, thinking };
+	}
+	if (rest.length > 1) return { status: false, error: usage };
+	const thinking = rest.length === 1 ? parseThinking(rest[0] as string) : undefined;
+	if (thinking === "invalid") return { status: false, error: `Invalid thinking level "${rest[0]}". ${usage}` };
+	return { status: false, model: first, thinking };
+}
+
+/** Plugin override wins; otherwise the orchestrator session's own values apply. */
+export function resolveSubagentDefaults(
+	settings: OrchestratorSettings,
+	inherited: { model?: string; thinkingLevel?: ThinkingLevel },
+): { model?: string; thinkingLevel?: ThinkingLevel } {
+	return {
+		model: settings.worker.model ?? inherited.model,
+		thinkingLevel: settings.worker.thinkingLevel ?? inherited.thinkingLevel,
+	};
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
 	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
@@ -137,7 +206,22 @@ export function writeProjectSettings(cwd: string, patch: Record<string, unknown>
 		current && typeof current === "object" && !Array.isArray(current)
 			? { ...(current as Record<string, unknown>) }
 			: {};
-	Object.assign(merged, patch);
+	for (const [key, value] of Object.entries(patch)) {
+		const current = merged[key];
+		if (
+			value &&
+			typeof value === "object" &&
+			!Array.isArray(value) &&
+			current &&
+			typeof current === "object" &&
+			!Array.isArray(current)
+		) {
+			// One level deep is enough for `audit` and `worker`; undefined removes a key.
+			merged[key] = { ...(current as Record<string, unknown>), ...(value as Record<string, unknown>) };
+		} else {
+			merged[key] = value;
+		}
+	}
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	const temp = `${file}.tmp-${process.pid}`;
 	fs.writeFileSync(temp, `${JSON.stringify(merged, null, 2)}\n`, "utf8");

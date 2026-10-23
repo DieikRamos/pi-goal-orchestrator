@@ -3,7 +3,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
-import { applySettingsLayer, DEFAULT_SETTINGS, projectSettingsPath, writeProjectSettings } from "../src/settings.ts";
+import {
+	applySettingsLayer,
+	DEFAULT_SETTINGS,
+	parseWorkerArgs,
+	projectSettingsPath,
+	resolveSubagentDefaults,
+	writeProjectSettings,
+} from "../src/settings.ts";
 
 test("defaults are valid", () => {
 	assert.equal(DEFAULT_SETTINGS.maxConcurrent, 3);
@@ -70,6 +77,58 @@ test("writeProjectSettings merges atomically and preserves unknown keys", () => 
 		const raw = JSON.parse(fs.readFileSync(projectSettingsPath(cwd), "utf8")) as Record<string, unknown>;
 		assert.deepEqual(raw.fromNewerBuild, { keep: true });
 		assert.equal(fs.readdirSync(path.join(cwd, ".pi")).some((name) => name.includes(".tmp-")), false);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
+
+test("parseWorkerArgs understands model, thinking, shorthand and reset", () => {
+	assert.deepEqual(parseWorkerArgs(undefined), { status: true });
+	assert.deepEqual(parseWorkerArgs("status"), { status: true });
+	assert.deepEqual(parseWorkerArgs("openai/gpt-5"), { status: false, model: "openai/gpt-5", thinking: undefined });
+	assert.deepEqual(parseWorkerArgs("openai/gpt-5 high"), {
+		status: false,
+		model: "openai/gpt-5",
+		thinking: "high",
+	});
+	assert.deepEqual(parseWorkerArgs("thinking minimal"), { status: false, thinking: "minimal" });
+	assert.deepEqual(parseWorkerArgs("model default low"), { status: false, model: null, thinking: "low" });
+	assert.deepEqual(parseWorkerArgs("thinking default"), { status: false, thinking: null });
+	assert.deepEqual(parseWorkerArgs("default"), { status: false, model: null, thinking: null });
+	assert.match(parseWorkerArgs("thinking extreme").error ?? "", /Invalid thinking level/);
+	assert.match(parseWorkerArgs("a b c").error ?? "", /Usage/);
+});
+
+test("subagent defaults inherit the orchestrator unless the plugin overrides them", () => {
+	assert.deepEqual(resolveSubagentDefaults(DEFAULT_SETTINGS, { model: "p/session", thinkingLevel: "low" }), {
+		model: "p/session",
+		thinkingLevel: "low",
+	});
+	const configured = applySettingsLayer(DEFAULT_SETTINGS, { worker: { model: "p/cheap", thinkingLevel: "minimal" } });
+	assert.deepEqual(resolveSubagentDefaults(configured, { model: "p/session", thinkingLevel: "low" }), {
+		model: "p/cheap",
+		thinkingLevel: "minimal",
+	});
+});
+
+test("writeProjectSettings deep-merges worker/audit and keeps sibling keys", () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "orchestrator-settings-deep-"));
+	try {
+		fs.mkdirSync(path.join(cwd, ".pi"), { recursive: true });
+		fs.writeFileSync(
+			projectSettingsPath(cwd),
+			JSON.stringify({ worker: { model: "p/a" }, audit: { enabled: false }, maxConcurrent: 2 }),
+		);
+		writeProjectSettings(cwd, { worker: { thinkingLevel: "high" } });
+		let raw = JSON.parse(fs.readFileSync(projectSettingsPath(cwd), "utf8")) as Record<string, any>;
+		assert.deepEqual(raw.worker, { model: "p/a", thinkingLevel: "high" });
+		assert.deepEqual(raw.audit, { enabled: false });
+		assert.equal(raw.maxConcurrent, 2);
+
+		writeProjectSettings(cwd, { worker: { model: undefined } });
+		raw = JSON.parse(fs.readFileSync(projectSettingsPath(cwd), "utf8")) as Record<string, any>;
+		assert.deepEqual(raw.worker, { thinkingLevel: "high" });
 	} finally {
 		fs.rmSync(cwd, { recursive: true, force: true });
 	}

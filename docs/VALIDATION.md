@@ -6,7 +6,7 @@ Date: 2026-10-22. Every test below loaded the extension via `pi -e` and used the
 
 ```bash
 npm run check   # tsc --noEmit, 0 errors
-npm test        # 49/49 tests
+npm test        # 53/53 tests
 ```
 
 Coverage:
@@ -32,7 +32,11 @@ Coverage:
   widget/status line, `orchestrator_run` rejecting an unknown plan before
   touching subagents, and `/orchestrator-plan-clear` guarding confirmation
   (headless refusal without `--yes`) and clearing all plans;
-- settings mutations: atomic project-settings write preserving unknown keys, no temp file left behind.
+- settings mutations: atomic project-settings write preserving unknown keys,
+  one-level deep merge for worker/audit, no temp file left behind;
+- `/orchestrator-model`: argument parsing (model, thinking, shorthand, reset,
+  invalid levels), resolution order (node > plugin > orchestrator session), and
+  command wiring writing/clearing project worker settings.
 
 The goal-specific tests from the previous version (goal header parsing, task-mode
 planning, automatic goal trigger, write/edit guard) were removed together with the
@@ -117,3 +121,25 @@ Result: response `handled`, the `plans/` directory was removed, the
 `runs/run-1/run.json` artifact was kept, and the `Cleared 2 plans.` notification
 was emitted. The same session also emitted `setWidget`/`setStatus` calls,
 confirming the dashboard hooks run in a real pi process.
+
+## 7. Subagent model + thinking inheritance (2026-10-22)
+
+Real RPC session in a temp project:
+
+```text
+/orchestrator-model openai/gpt-5 high   → worker { model: "openai/gpt-5", thinkingLevel: "high" }
+/orchestrator-model thinking minimal     → keeps the model, changes thinking
+/orchestrator-model                     → status shows the effective values
+/orchestrator-model default             → worker {} (inherits again)
+```
+
+Real run with no worker override, in a temp git repo: `orchestrator_plan` →
+`orchestrator_run`; the spawned node artifact recorded
+
+```text
+model: opencode-go/deepseek-v4.1-flash
+thinkingLevel: low
+```
+
+which are the orchestrator session's model and thinking level, proving the
+default inheritance path (node > plugin setting > orchestrator session).

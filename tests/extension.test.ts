@@ -46,6 +46,8 @@ interface TestCtx {
 		confirm: (title: string, message: string) => Promise<boolean>;
 	};
 	hasUI: boolean;
+	model?: { provider: string; id: string };
+	thinkingLevel?: string;
 	sessionManager: { getBranch: () => unknown[] };
 }
 
@@ -86,6 +88,7 @@ test("registers the two tools, the commands and the session hooks", () => {
 		"orchestrator-plan",
 		"orchestrator-plan-clear",
 		"orchestrator-plan-list",
+		"orchestrator-model",
 		"orchestrator-resume",
 		"orchestrator-plan-list",
 		"orchestrator-status",
@@ -187,6 +190,38 @@ test("orchestrator_run rejects a missing plan before touching subagents", async 
 		};
 		assert.equal(result.isError, true);
 		assert.match(result.content[0]?.text ?? "", /Plan #99 not found/);
+	} finally {
+		fs.rmSync(ctx.cwd, { recursive: true, force: true });
+	}
+});
+
+test("/orchestrator-model sets and clears subagent model/thinking in project settings", async () => {
+	const h = harness();
+	const ctx = tempCwd(h);
+	ctx.model = { provider: "opencode-go", id: "deepseek-v4.1-flash" };
+	ctx.thinkingLevel = "low";
+	try {
+		const command = h.commands.get("orchestrator-model");
+		assert.ok(command);
+
+		await command.handler("", ctx);
+		assert.match(h.notices.at(-1) ?? "", /inherit \(opencode-go\/deepseek-v4.1-flash\)/);
+		assert.match(h.notices.at(-1) ?? "", /inherit \(low\)/);
+
+		await command.handler("openai/gpt-5", ctx);
+		let raw = JSON.parse(fs.readFileSync(path.join(ctx.cwd, ".pi", "pi-goal-orchestrator.json"), "utf8")) as Record<string, any>;
+		assert.deepEqual(raw.worker, { model: "openai/gpt-5" });
+
+		await command.handler("thinking minimal", ctx);
+		raw = JSON.parse(fs.readFileSync(path.join(ctx.cwd, ".pi", "pi-goal-orchestrator.json"), "utf8")) as Record<string, any>;
+		assert.deepEqual(raw.worker, { model: "openai/gpt-5", thinkingLevel: "minimal" });
+
+		await command.handler("default", ctx);
+		raw = JSON.parse(fs.readFileSync(path.join(ctx.cwd, ".pi", "pi-goal-orchestrator.json"), "utf8")) as Record<string, any>;
+		assert.deepEqual(raw.worker, {});
+
+		await command.handler("thinking extreme", ctx);
+		assert.match(h.notices.at(-1) ?? "", /Invalid thinking level/);
 	} finally {
 		fs.rmSync(ctx.cwd, { recursive: true, force: true });
 	}

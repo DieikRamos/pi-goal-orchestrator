@@ -48,6 +48,7 @@ pi -e ./pi-goal-orchestrator
 | `/orchestrator-resume [number]` | Executes a stored plan. Without a number, picks the newest resumable plan (never a running one). |
 | `/orchestrator-plan-list` | Lists plans: number, title, status and node count. |
 | `/orchestrator-plan-clear [--yes]` | Deletes **all** stored plans (asks for confirmation; run artifacts under `runs/` are kept). |
+| `/orchestrator-model [...]` | Sets the subagent model and thinking level; defaults inherit the orchestrator. |
 | `/orchestrator-status [number]` | Details for one plan (or the latest plan/run). |
 | `/orchestrator-settings` | Shows the resolved configuration. |
 
@@ -80,6 +81,31 @@ This starts a turn whose only job is to call `orchestrator_run` with
 `plan_number`. The tool prints a live progress result, and the dashboard shows
 the plan with per-node status. Node work always runs in subagents; the main
 session receives one compact report.
+
+### Subagent model and thinking
+
+By default every subagent inherits the **orchestrator session's** current model
+and thinking level. Override them per project:
+
+```text
+/orchestrator-model                                  # show effective values
+/orchestrator-model openai/gpt-5 high                # model + thinking
+/orchestrator-model thinking minimal                 # thinking only
+/orchestrator-model model default                    # clear the model override
+/orchestrator-model default                          # clear both (inherit again)
+```
+
+The command writes `worker.model` / `worker.thinkingLevel` in the project
+settings file. Resolution order per node:
+
+```text
+node.model  >  worker.model  >  orchestrator session model
+node.thinking_level  >  worker.thinkingLevel  >  orchestrator session thinking level
+```
+
+Plans persist the nodes as authored; these defaults are resolved at **run time**,
+so changing the command affects existing plans too. Auditors keep their separate
+`audit.model` / `audit.thinkingLevel` settings.
 
 ## Tools
 
@@ -168,7 +194,8 @@ Optional, in `.pi/pi-goal-orchestrator.json` (project) or
     "model": "opencode-go/deepseek-v4.1-flash"
   },
   "worker": {
-    "model": "opencode-go/deepseek-v4.1-flash"
+    "model": "opencode-go/deepseek-v4.1-flash",
+    "thinkingLevel": "high"
   },
   "defaultTimeoutSeconds": 1800,
   "defaultMaxAttempts": 2,
