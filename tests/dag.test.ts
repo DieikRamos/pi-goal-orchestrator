@@ -30,6 +30,36 @@ test("normalizes a plan and fills defaults", () => {
 	assert.equal(plan.nodes[0]!.status, "pending");
 });
 
+test("blank optional node fields are treated as absent, not as invalid", () => {
+	const plan = normalizePlan(
+		spec([
+			{
+				id: "write",
+				prompt: "write the file",
+				title: "",
+				model: "",
+				thinking_level: "  ",
+				agent_type: "",
+				isolation: "",
+				deps: ["", " "],
+				outputs: ["", "out.txt"],
+			},
+		]),
+	);
+	const node = plan.nodes[0]!;
+	assert.equal(node.model, undefined);
+	assert.equal(node.thinkingLevel, undefined);
+	assert.equal(node.agentType, "general-purpose");
+	assert.equal(node.isolation, undefined);
+	assert.deepEqual(node.deps, []);
+	assert.deepEqual(node.outputs, ["out.txt"]);
+	assert.equal(node.title, "write");
+	assert.equal(normalizePlan(spec([{ id: "a", prompt: "a" }], { audit: { model: "  " } })).audit.model, undefined);
+	assert.equal(normalizePlan(spec([{ id: "a", prompt: "a", audit: null }])).nodes[0]!.audit, true);
+	assert.equal(normalizePlan(spec([{ id: "a", prompt: "a" }], { audit: { enabled: null } })).audit.enabled, true);
+	assert.equal(normalizePlan(spec([{ id: "a", prompt: "a" }], { fail_fast: null })).failFast, true);
+});
+
 test("rejects a missing dependency", () => {
 	assert.throws(
 		() => normalizePlan(spec([{ id: "a", prompt: "a", deps: ["missing"] }])),

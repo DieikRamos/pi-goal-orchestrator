@@ -200,8 +200,8 @@ function createPlanTool(pi: ExtensionAPI) {
 				};
 			}
 			const settings = loadSettings(ctx.cwd);
-			const title = params.title.trim();
 			const objective = params.objective.trim();
+			const title = params.title.trim() || objective.slice(0, 120) || "Plan";
 			const nodes =
 				(params.nodes as PlanNodeSpec[] | undefined) && (params.nodes as PlanNodeSpec[]).length > 0
 					? (params.nodes as PlanNodeSpec[])

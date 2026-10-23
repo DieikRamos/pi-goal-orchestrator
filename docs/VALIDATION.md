@@ -6,12 +6,14 @@ Date: 2026-10-22. Every test below loaded the extension via `pi -e` and used the
 
 ```bash
 npm run check   # tsc --noEmit, 0 errors
-npm test        # 48/48 tests
+npm test        # 49/49 tests
 ```
 
 Coverage:
 
 - plan validation, cycles, unknown deps, defaults, and limits;
+- blank/null optional fields (`model`, `thinking_level`, `agent_type`, `isolation`,
+  `deps`, `outputs`, `audit`, `audit.enabled`, `fail_fast`) are treated as absent;
 - ready set / dependent blocking;
 - auditing (final marker, rejection, retry with feedback);
 - worker prompt without the parent transcript and with dependency branch info;

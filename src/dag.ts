@@ -42,8 +42,10 @@ function nonEmptyString(value: unknown, field: string, max = 20_000): string {
 
 function optionalString(value: unknown, field: string, max = 2_000): string | undefined {
 	if (value === undefined || value === null) return undefined;
-	if (typeof value !== "string" || !value.trim()) throw new PlanValidationError(`${field} must be a non-empty string when set.`);
+	if (typeof value !== "string") throw new PlanValidationError(`${field} must be a string when set.`);
+	// Models often send "" or whitespace for "not set"; treat that as absent.
 	const text = value.trim();
+	if (!text) return undefined;
 	if (text.length > max) throw new PlanValidationError(`${field} is too long (max ${max} characters).`);
 	return text;
 }
@@ -58,10 +60,13 @@ function boundedInt(value: unknown, field: string, min: number, max: number, fal
 
 function thinkingLevel(value: unknown, field: string): ThinkingLevel | undefined {
 	if (value === undefined || value === null) return undefined;
-	if (typeof value !== "string" || !THINKING_LEVELS.has(value as ThinkingLevel)) {
+	if (typeof value !== "string") throw new PlanValidationError(`${field} must be a string when set.`);
+	const text = value.trim();
+	if (!text) return undefined;
+	if (!THINKING_LEVELS.has(text as ThinkingLevel)) {
 		throw new PlanValidationError(`${field} must be one of ${[...THINKING_LEVELS].join(", ")}.`);
 	}
-	return value as ThinkingLevel;
+	return text as ThinkingLevel;
 }
 
 function stringList(value: unknown, field: string, maxItems: number, maxLength: number): string[] | undefined {
@@ -70,8 +75,10 @@ function stringList(value: unknown, field: string, maxItems: number, maxLength: 
 	if (value.length > maxItems) throw new PlanValidationError(`${field} has too many entries (max ${maxItems}).`);
 	const out: string[] = [];
 	for (const item of value) {
-		if (typeof item !== "string" || !item.trim()) throw new PlanValidationError(`${field} entries must be non-empty strings.`);
+		if (typeof item !== "string") throw new PlanValidationError(`${field} entries must be strings.`);
+		// Blank entries are treated as absent instead of failing the whole plan.
 		const text = item.trim();
+		if (!text) continue;
 		if (text.length > maxLength) throw new PlanValidationError(`${field} entry is too long (max ${maxLength}).`);
 		if (!out.includes(text)) out.push(text);
 	}
@@ -96,7 +103,7 @@ function normalizeNode(raw: unknown, index: number): PlanNode {
 	}
 	const prompt = nonEmptyString(raw.prompt, `nodes[${index}].prompt`, 20_000);
 	const deps = stringList(raw.deps, `nodes[${index}].deps`, MAX_NODES, 64) ?? [];
-	const audit = raw.audit === undefined ? true : raw.audit;
+	const audit = raw.audit === undefined || raw.audit === null ? true : raw.audit;
 	if (typeof audit !== "boolean") throw new PlanValidationError(`nodes[${index}].audit must be a boolean.`);
 	return {
 		id,
@@ -106,11 +113,12 @@ function normalizeNode(raw: unknown, index: number): PlanNode {
 		agentType: optionalString(raw.agent_type, `nodes[${index}].agent_type`, 100) ?? "general-purpose",
 		model: optionalString(raw.model, `nodes[${index}].model`, 200),
 		thinkingLevel: thinkingLevel(raw.thinking_level, `nodes[${index}].thinking_level`),
-		isolation: raw.isolation === undefined
-			? undefined
-			: raw.isolation === "worktree" || raw.isolation === "off"
-				? raw.isolation
-				: (() => { throw new PlanValidationError(`nodes[${index}].isolation must be "worktree" or "off".`); })(),
+		isolation:
+			raw.isolation === undefined || raw.isolation === null || (typeof raw.isolation === "string" && !raw.isolation.trim())
+				? undefined
+				: raw.isolation === "worktree" || raw.isolation === "off"
+					? raw.isolation
+					: (() => { throw new PlanValidationError(`nodes[${index}].isolation must be "worktree" or "off".`); })(),
 		maxTurns: boundedInt(raw.max_turns, `nodes[${index}].max_turns`, 1, 500, DEFAULT_MAX_TURNS),
 		timeoutMs: boundedInt(raw.timeout_seconds, `nodes[${index}].timeout_seconds`, 30, 86_400, DEFAULT_TIMEOUT_SECONDS) * 1000,
 		audit,
@@ -157,7 +165,7 @@ export function normalizePlan(spec: PlanSpec, defaultObjective?: string): Normal
 	}
 
 	const auditSpec = isRecord(spec.audit) ? spec.audit : {};
-	const auditEnabled = auditSpec.enabled === undefined ? true : auditSpec.enabled;
+	const auditEnabled = auditSpec.enabled === undefined || auditSpec.enabled === null ? true : auditSpec.enabled;
 	if (typeof auditEnabled !== "boolean") throw new PlanValidationError("audit.enabled must be a boolean.");
 	for (const node of nodes) {
 		if (!auditEnabled) node.audit = false;
@@ -168,7 +176,7 @@ export function normalizePlan(spec: PlanSpec, defaultObjective?: string): Normal
 		objective,
 		nodes,
 		maxConcurrent: boundedInt(spec.max_concurrent, "max_concurrent", 1, HARD_MAX_CONCURRENT, DEFAULT_MAX_CONCURRENT),
-		failFast: spec.fail_fast === undefined ? true : !!spec.fail_fast,
+		failFast: spec.fail_fast === undefined || spec.fail_fast === null ? true : !!spec.fail_fast,
 		audit: {
 			enabled: auditEnabled,
 			model: optionalString(auditSpec.model, "audit.model", 200),
