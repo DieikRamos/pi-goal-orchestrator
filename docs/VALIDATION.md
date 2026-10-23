@@ -6,7 +6,7 @@ Date: 2026-10-22. Every test below loaded the extension via `pi -e` and used the
 
 ```bash
 npm run check   # tsc --noEmit, 0 errors
-npm test        # 45/45 tests
+npm test        # 48/48 tests
 ```
 
 Coverage:
@@ -20,14 +20,16 @@ Coverage:
 - fake scheduler: parallel fan-out, audit rejection retry, blocking, missing outputs, fail-fast;
 - plan store: numbering from the highest existing plan, atomic plan.json/plan.md writes,
   list/get/update, malformed plan directories ignored, resume target resolution
-  (explicit number, newest resumable, running plans excluded by default);
+  (explicit number, newest resumable, running plans excluded by default), and
+  clearAll deleting plans while leaving run artifacts intact;
 - plan artifacts: markdown rendering with objective, requirements, notes, node deps,
   and the last run node outcomes (status/attempts) persisted back into plan.json;
 - extension wiring with a fake API: tool/command/session-hook registration,
   `/orchestrator-plan` sending the hidden planning turn, `/orchestrator-resume`
   resolving and refusing running plans, plan-list/status output, and the dashboard
-  widget/status line, and `orchestrator_run` rejecting an unknown plan before
-  touching subagents;
+  widget/status line, `orchestrator_run` rejecting an unknown plan before
+  touching subagents, and `/orchestrator-plan-clear` guarding confirmation
+  (headless refusal without `--yes`) and clearing all plans;
 - settings mutations: atomic project-settings write preserving unknown keys, no temp file left behind.
 
 The goal-specific tests from the previous version (goal header parsing, task-mode
@@ -98,3 +100,18 @@ pi -e <repo> -p "Call orchestrator_run plan 1"    → run complete
 
 A real `pi -e … -p` load also confirmed the tools are registered as
 `orchestrator_plan` and `orchestrator_run`.
+
+
+## 6. Real command test over RPC (2026-10-22)
+
+`pi --mode rpc --no-session` in a temp project with two plan directories and a
+run artifact, then:
+
+```json
+{"type":"prompt","message":"/orchestrator-plan-clear --yes"}
+```
+
+Result: response `handled`, the `plans/` directory was removed, the
+`runs/run-1/run.json` artifact was kept, and the `Cleared 2 plans.` notification
+was emitted. The same session also emitted `setWidget`/`setStatus` calls,
+confirming the dashboard hooks run in a real pi process.

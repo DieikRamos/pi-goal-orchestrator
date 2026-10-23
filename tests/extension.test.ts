@@ -43,6 +43,7 @@ interface TestCtx {
 		notify: (message: string) => void;
 		setWidget: (key: string, content: unknown) => void;
 		setStatus: (key: string, text: string | undefined) => void;
+		confirm: (title: string, message: string) => Promise<boolean>;
 	};
 	hasUI: boolean;
 	sessionManager: { getBranch: () => unknown[] };
@@ -55,6 +56,7 @@ function tempCwd(h: Harness): TestCtx {
 			notify: (message: string) => h.notices.push(message),
 			setWidget: (key: string) => h.widgets.push(key),
 			setStatus: (_key: string, text: string | undefined) => h.statuses.push(text),
+			confirm: async () => true,
 		},
 		hasUI: true,
 		sessionManager: { getBranch: () => [] },
@@ -82,6 +84,8 @@ test("registers the two tools, the commands and the session hooks", () => {
 	assert.ok(h.tools.has("orchestrator_run"));
 	for (const command of [
 		"orchestrator-plan",
+		"orchestrator-plan-clear",
+		"orchestrator-plan-list",
 		"orchestrator-resume",
 		"orchestrator-plan-list",
 		"orchestrator-status",
@@ -183,6 +187,46 @@ test("orchestrator_run rejects a missing plan before touching subagents", async 
 		};
 		assert.equal(result.isError, true);
 		assert.match(result.content[0]?.text ?? "", /Plan #99 not found/);
+	} finally {
+		fs.rmSync(ctx.cwd, { recursive: true, force: true });
+	}
+});
+
+test("/orchestrator-plan-clear deletes all plans and keeps run artifacts", async () => {
+	const h = harness();
+	const ctx = tempCwd(h);
+	try {
+		await createPlan(h.tools, ctx, "One", "One");
+		await createPlan(h.tools, ctx, "Two", "Two");
+		const runDir = path.join(ctx.cwd, ".pi", "orchestrator", "runs", "run-1");
+		fs.mkdirSync(runDir, { recursive: true });
+		fs.writeFileSync(path.join(runDir, "run.json"), "{}");
+
+		const clear = h.commands.get("orchestrator-plan-clear");
+		assert.ok(clear);
+		await clear.handler("--yes", ctx);
+		assert.match(h.notices.at(-1) ?? "", /Cleared 2 plans/);
+		assert.equal(fs.existsSync(path.join(ctx.cwd, ".pi", "orchestrator", "plans")), false);
+		assert.equal(fs.existsSync(path.join(runDir, "run.json")), true);
+
+		await clear.handler("", ctx);
+		assert.match(h.notices.at(-1) ?? "", /No plans to clear/);
+	} finally {
+		fs.rmSync(ctx.cwd, { recursive: true, force: true });
+	}
+});
+
+test("/orchestrator-plan-clear refuses without confirmation in a headless session", async () => {
+	const h = harness();
+	const ctx = tempCwd(h);
+	try {
+		await createPlan(h.tools, ctx, "Keep me", "Keep me");
+		ctx.hasUI = false;
+		const clear = h.commands.get("orchestrator-plan-clear");
+		assert.ok(clear);
+		await clear.handler("", ctx);
+		assert.match(h.notices.at(-1) ?? "", /Refusing to delete 1 plan/);
+		assert.ok(fs.existsSync(path.join(ctx.cwd, ".pi", "orchestrator", "plans", "1", "plan.json")));
 	} finally {
 		fs.rmSync(ctx.cwd, { recursive: true, force: true });
 	}

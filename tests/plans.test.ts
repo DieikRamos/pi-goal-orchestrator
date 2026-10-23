@@ -101,6 +101,26 @@ test("rendered markdown contains the objective, requirements and nodes", () => {
 	assert.match(markdown, /Deps: contract/);
 });
 
+test("clearAll removes every plan but leaves run artifacts alone", () => {
+	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "orchestrator-clear-"));
+	try {
+		const store = new PlanStore(cwd, ".pi/orchestrator");
+		store.create({ title: "One", objective: "One", nodes: NODES });
+		store.create({ title: "Two", objective: "Two", nodes: NODES });
+		const runDir = path.join(cwd, ".pi", "orchestrator", "runs", "run-1");
+		fs.mkdirSync(runDir, { recursive: true });
+		fs.writeFileSync(path.join(runDir, "run.json"), "{}");
+
+		assert.equal(store.clearAll(), 2);
+		assert.deepEqual(store.list(), []);
+		assert.equal(fs.existsSync(store.root), false);
+		assert.equal(fs.existsSync(path.join(runDir, "run.json")), true);
+		assert.equal(store.clearAll(), 0);
+	} finally {
+		fs.rmSync(cwd, { recursive: true, force: true });
+	}
+});
+
 test("PlanStore numbers, persists, reads and updates plans", () => {
 	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "orchestrator-plans-"));
 	try {

@@ -547,6 +547,45 @@ export default function orchestrator(pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerCommand("orchestrator-plan-clear", {
+		description: "Delete all stored plans (run artifacts are kept)",
+		handler: async (_args, ctx) => {
+			if (childSession()) {
+				notify(ctx, "Plan storage is unavailable inside a subagent.", "warning");
+				return;
+			}
+			const settings = loadSettings(ctx.cwd);
+			const store = storeFor(ctx, settings);
+			const plans = store.list();
+			if (plans.length === 0) {
+				notify(ctx, "No plans to clear.");
+				return;
+			}
+			const forced = /(?:^|\s)(?:--yes|-y)(?:\s|$)/i.test(_args ?? "");
+			if (!forced) {
+				if (!ctx.hasUI) {
+					notify(
+						ctx,
+						`Refusing to delete ${plans.length} plan(s) without confirmation. Re-run with --yes.`,
+						"warning",
+					);
+					return;
+				}
+				const confirmed = await ctx.ui.confirm(
+					`Delete all ${plans.length} plan(s)?`,
+					"Removes every plan.json/plan.md under .pi/orchestrator/plans. Run artifacts under runs/ are kept. This cannot be undone.",
+				);
+				if (!confirmed) {
+					notify(ctx, "Cancelled; plans unchanged.");
+					return;
+				}
+			}
+			const removed = store.clearAll();
+			refreshWidget(ctx, settings);
+			notify(ctx, `Cleared ${removed} plan${removed === 1 ? "" : "s"}.`);
+		},
+	});
+
 	pi.registerCommand("orchestrator-resume", {
 		description: "Execute a stored plan by number (defaults to the newest resumable plan)",
 		handler: async (_args, ctx) => {

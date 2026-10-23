@@ -47,6 +47,7 @@ pi -e ./pi-goal-orchestrator
 | `/orchestrator-plan <draft>` | Starts a planning turn: refine the objective, decompose it, and save a numbered plan. Nothing executes. |
 | `/orchestrator-resume [number]` | Executes a stored plan. Without a number, picks the newest resumable plan (never a running one). |
 | `/orchestrator-plan-list` | Lists plans: number, title, status and node count. |
+| `/orchestrator-plan-clear [--yes]` | Deletes **all** stored plans (asks for confirmation; run artifacts under `runs/` are kept). |
 | `/orchestrator-status [number]` | Details for one plan (or the latest plan/run). |
 | `/orchestrator-settings` | Shows the resolved configuration. |
 

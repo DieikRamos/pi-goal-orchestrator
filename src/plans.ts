@@ -284,6 +284,13 @@ export class PlanStore {
 		return plan;
 	}
 
+	/** Delete every stored plan. Run artifacts stay; returns how many plans were removed. */
+	clearAll(): number {
+		const count = this.list().length;
+		fs.rmSync(this.root, { recursive: true, force: true });
+		return count;
+	}
+
 	update(number: number, patch: Partial<Omit<PlanRecord, "number" | "createdAt">>): PlanRecord | null {
 		const current = this.get(number);
 		if (!current) return null;
